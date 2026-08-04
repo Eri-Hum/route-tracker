@@ -36,12 +36,35 @@ async function snapCandidate(points) {
   }
 }
 
-export async function findRouteSuggestions(start, distanceKm, terrain) {
-  const candidateRoutes = CANDIDATES.map((c) =>
-    generateLoopRoute(start, distanceKm, c.rotation, c.shape, POINTS_PER_ROUTE)
+// The "wobble" shape variants (and, once snapped, the real road network)
+// both tend to make a loop longer than its target distance. Since path
+// length scales roughly linearly with the loop's radius, one correction
+// pass - regenerate at a rescaled distance based on the measured error -
+// gets noticeably closer to the requested distance without the cost of a
+// full iterative search.
+async function buildCandidate(start, distanceKm, { rotation, shape }) {
+  const first = await snapCandidate(
+    generateLoopRoute(start, distanceKm, rotation, shape, POINTS_PER_ROUTE)
+  );
+  if (first.distanceKm <= 0) return first;
+
+  const errorRatio = Math.abs(first.distanceKm - distanceKm) / distanceKm;
+  if (errorRatio < 0.08) return first;
+
+  const scale = distanceKm / first.distanceKm;
+  const corrected = await snapCandidate(
+    generateLoopRoute(start, distanceKm * scale, rotation, shape, POINTS_PER_ROUTE)
   );
 
-  const snapped = await Promise.all(candidateRoutes.map(snapCandidate));
+  const correctedError = Math.abs(corrected.distanceKm - distanceKm);
+  const firstError = Math.abs(first.distanceKm - distanceKm);
+  return correctedError < firstError ? corrected : first;
+}
+
+export async function findRouteSuggestions(start, distanceKm, terrain) {
+  const snapped = await Promise.all(
+    CANDIDATES.map((c) => buildCandidate(start, distanceKm, c))
+  );
 
   // Resample each road-following route down to a consistent point count
   // before batching elevation lookups.
