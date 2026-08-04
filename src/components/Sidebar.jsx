@@ -4,11 +4,18 @@ function formatMinutes(mins) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-function DrawModeControls({ drawnRoute, onClear }) {
+function DrawModeControls({ drawnRoute, onClear, penActive, onTogglePen }) {
   return (
     <div className="sidebar-section">
       <h2>Draw Route</h2>
-      <p className="hint">Press and drag on the map to draw a path freehand.</p>
+      <button className="btn btn-primary" onClick={onTogglePen}>
+        {penActive ? 'Stop drawing' : 'Start drawing'}
+      </button>
+      <p className="hint">
+        {penActive
+          ? 'Press and drag on the map to draw a path freehand.'
+          : 'Move the map freely, then click "Start drawing" to draw a route.'}
+      </p>
       {drawnRoute ? (
         <div className="stat-card">
           <div className="stat-row">
@@ -94,35 +101,56 @@ function FindModeControls({
         </div>
       )}
 
-      {suggestions.length > 0 && (
-        <div className="route-list">
-          {suggestions.map((route, i) => (
-            <button
-              key={route.id}
-              className={`route-card ${selectedRouteId === route.id ? 'route-card--selected' : ''}`}
-              onClick={() =>
-                setSelectedRouteId(selectedRouteId === route.id ? null : route.id)
-              }
-            >
-              <div className="route-card-title">
-                Route {i + 1} · {route.terrain}
+      {suggestions.length > 0 &&
+        (() => {
+          const currentIndex = Math.max(
+            0,
+            suggestions.findIndex((r) => r.id === selectedRouteId)
+          );
+          const route = suggestions[currentIndex];
+          const goTo = (index) => {
+            const wrapped = (index + suggestions.length) % suggestions.length;
+            setSelectedRouteId(suggestions[wrapped].id);
+          };
+          return (
+            <div className="route-nav">
+              <div className="route-nav-header">
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => goTo(currentIndex - 1)}
+                  disabled={suggestions.length < 2}
+                >
+                  Prev
+                </button>
+                <span className="hint">
+                  Route {currentIndex + 1} of {suggestions.length}
+                </span>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => goTo(currentIndex + 1)}
+                  disabled={suggestions.length < 2}
+                >
+                  Next
+                </button>
               </div>
-              <div className="stat-row">
-                <span>Distance</span>
-                <strong>{route.distanceKm.toFixed(2)} km</strong>
+              <div className="route-card route-card--selected">
+                <div className="route-card-title">{route.terrain}</div>
+                <div className="stat-row">
+                  <span>Distance</span>
+                  <strong>{route.distanceKm.toFixed(2)} km</strong>
+                </div>
+                <div className="stat-row">
+                  <span>Elevation gain</span>
+                  <strong>{Math.round(route.elevationGainM)} m</strong>
+                </div>
+                <div className="stat-row">
+                  <span>Est. time</span>
+                  <strong>{formatMinutes(route.estimatedMinutes)}</strong>
+                </div>
               </div>
-              <div className="stat-row">
-                <span>Elevation gain</span>
-                <strong>{Math.round(route.elevationGainM)} m</strong>
-              </div>
-              <div className="stat-row">
-                <span>Est. time</span>
-                <strong>{formatMinutes(route.estimatedMinutes)}</strong>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
+            </div>
+          );
+        })()}
     </div>
   );
 }
@@ -138,7 +166,12 @@ export default function Sidebar({ mode, onToggleMode, ...props }) {
       </div>
 
       {mode === 'draw' ? (
-        <DrawModeControls drawnRoute={props.drawnRoute} onClear={props.onClearDrawnRoute} />
+        <DrawModeControls
+          drawnRoute={props.drawnRoute}
+          onClear={props.onClearDrawnRoute}
+          penActive={props.penActive}
+          onTogglePen={props.onTogglePen}
+        />
       ) : (
         <FindModeControls {...props} />
       )}
