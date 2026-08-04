@@ -26,6 +26,7 @@ function RecenterOnPosition({ position }) {
 
 export default function MapView({
   mode,
+  drawingActive,
   onRouteComplete,
   drawnRoute,
   userPosition,
@@ -43,7 +44,7 @@ export default function MapView({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      <DrawCanvas active={mode === 'draw'} onRouteComplete={onRouteComplete} />
+      <DrawCanvas active={mode === 'draw' && drawingActive} onRouteComplete={onRouteComplete} />
 
       {mode === 'draw' && drawnRoute && (
         <Polyline positions={drawnRoute.latlngs} pathOptions={{ color: '#e6402b', weight: 4 }} />
