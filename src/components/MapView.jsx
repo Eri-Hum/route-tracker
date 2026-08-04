@@ -30,8 +30,7 @@ export default function MapView({
   onRouteComplete,
   drawnRoute,
   userPosition,
-  suggestions,
-  selectedRouteId,
+  route,
 }) {
   return (
     <MapContainer
@@ -59,22 +58,12 @@ export default function MapView({
         </>
       )}
 
-      {mode === 'find' &&
-        suggestions.map((route) => {
-          const isSelected = route.id === selectedRouteId;
-          if (selectedRouteId && !isSelected) return null;
-          return (
-            <Polyline
-              key={route.id}
-              positions={route.points}
-              pathOptions={{
-                color: isSelected ? '#2b7de6' : '#9aa5b1',
-                weight: isSelected ? 5 : 3,
-                opacity: isSelected ? 0.9 : 0.6,
-              }}
-            />
-          );
-        })}
+      {mode === 'find' && route && (
+        <Polyline
+          positions={route.points}
+          pathOptions={{ color: '#2b7de6', weight: 5, opacity: 0.9 }}
+        />
+      )}
     </MapContainer>
   );
 }

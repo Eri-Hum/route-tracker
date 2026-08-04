@@ -1,10 +1,13 @@
 import { useCallback, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import MapView from './components/MapView';
-import { findRouteSuggestions } from './utils/routeSuggestions';
+import { generateRouteSuggestion } from './utils/routeSuggestions';
 import './App.css';
 
 const DEFAULT_DISTANCE_KM = 5;
+// Soft cap on how many suggestions a single search can generate, mostly to
+// avoid hammering the free routing/elevation APIs from one session.
+const MAX_SUGGESTIONS = 12;
 
 function App() {
   const [mode, setMode] = useState('draw');
@@ -20,7 +23,7 @@ function App() {
   const [terrain, setTerrain] = useState('any');
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
-  const [selectedRouteId, setSelectedRouteId] = useState(null);
+  const [currentIndex, setCurrentIndex] = useState(-1);
   const [findError, setFindError] = useState(null);
 
   const handleToggleMode = () => {
@@ -61,18 +64,43 @@ function App() {
     if (!userPosition) return;
     setLoading(true);
     setFindError(null);
-    setSelectedRouteId(null);
     try {
-      const results = await findRouteSuggestions(
+      const first = await generateRouteSuggestion(userPosition, Number(distanceKm), terrain, 0);
+      setSuggestions([first]);
+      setCurrentIndex(0);
+    } catch (err) {
+      setFindError(err.message || 'Failed to fetch route data.');
+      setSuggestions([]);
+      setCurrentIndex(-1);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePrevSuggestion = () => {
+    setCurrentIndex((i) => Math.max(0, i - 1));
+  };
+
+  const handleNextSuggestion = async () => {
+    if (currentIndex + 1 < suggestions.length) {
+      setCurrentIndex((i) => i + 1);
+      return;
+    }
+    if (suggestions.length >= MAX_SUGGESTIONS) return;
+
+    setLoading(true);
+    setFindError(null);
+    try {
+      const next = await generateRouteSuggestion(
         userPosition,
         Number(distanceKm),
-        terrain
+        terrain,
+        suggestions.length
       );
-      setSuggestions(results);
-      if (results.length > 0) setSelectedRouteId(results[0].id);
+      setSuggestions((prev) => [...prev, next]);
+      setCurrentIndex(suggestions.length);
     } catch (err) {
-      setFindError(err.message || 'Failed to fetch elevation data.');
-      setSuggestions([]);
+      setFindError(err.message || 'Failed to fetch route data.');
     } finally {
       setLoading(false);
     }
@@ -97,8 +125,10 @@ function App() {
         onFindRoutes={handleFindRoutes}
         loading={loading}
         suggestions={suggestions}
-        selectedRouteId={selectedRouteId}
-        setSelectedRouteId={setSelectedRouteId}
+        currentIndex={currentIndex}
+        onPrevSuggestion={handlePrevSuggestion}
+        onNextSuggestion={handleNextSuggestion}
+        maxSuggestions={MAX_SUGGESTIONS}
       />
 
       <main className="map-area">
@@ -108,8 +138,7 @@ function App() {
           onRouteComplete={handleRouteComplete}
           drawnRoute={drawnRoute}
           userPosition={userPosition}
-          suggestions={suggestions}
-          selectedRouteId={selectedRouteId}
+          route={currentIndex >= 0 ? suggestions[currentIndex] : null}
         />
         {mode === 'draw' && (
           <button

@@ -1,19 +1,18 @@
 import { generateLoopRoute, resamplePath } from './geo';
 import { pathDistance } from './haversine';
 import { fetchElevations, elevationGain } from './elevation';
-import { snapRouteToRoads } from './routing';
+import { planRoadLoop } from './routing';
 
-// Kept small: these become routing waypoints, and too many closely-spaced
-// points forces the router to zigzag between parallel streets instead of
-// following a natural path (see generateLoopRoute).
-const POINTS_PER_ROUTE = 8;
+// Waypoints handed to the router; the trip service reorders them for an
+// efficient loop, so this can be a bit more generous than a forced-order
+// route without reintroducing zigzagging.
+const POINTS_PER_ROUTE = 10;
 const ELEVATION_SAMPLE_POINTS = 20;
-// Rotation + shape variant per candidate so the 3 suggestions look distinct.
-const CANDIDATES = [
-  { rotation: 0, shape: 0 },
-  { rotation: 130, shape: 1 },
-  { rotation: 250, shape: -1 },
-];
+// How many rotations to try when biasing toward a flat/hilly suggestion.
+const TERRAIN_SEARCH_ATTEMPTS = 3;
+// Waypoints for consecutive suggestions are spread using the golden angle,
+// which gives good, non-repeating coverage around the circle indefinitely.
+const GOLDEN_ANGLE_DEG = 137.5;
 
 // Baseline running pace (min/km) plus Naismith-style penalty for ascent.
 const BASE_PACE_MIN_PER_KM = 6;
@@ -28,25 +27,22 @@ function classify(gainM, distanceKm) {
   return gainPerKm < 8 ? 'flat' : 'hilly';
 }
 
-// Snap a candidate loop onto the real road/path network. Falls back to the
-// raw geometric loop if the routing service is unavailable, so a single
-// failed request doesn't sink the whole suggestion set.
-async function snapCandidate(points) {
+// Plan a single candidate loop and snap it to the road network. Falls back
+// to the raw geometric loop if the routing service is unavailable, so a
+// failed request doesn't sink the whole suggestion.
+async function planCandidate(points) {
   try {
-    return await snapRouteToRoads(points);
+    return await planRoadLoop(points);
   } catch {
     return { points, distanceKm: pathDistance(points) };
   }
 }
 
-// The "wobble" shape variants (and, once snapped, the real road network)
-// both tend to make a loop longer than its target distance. Since path
-// length scales roughly linearly with the loop's radius, one correction
-// pass - regenerate at a rescaled distance based on the measured error -
-// gets noticeably closer to the requested distance without the cost of a
-// full iterative search.
-async function buildCandidate(start, distanceKm, { rotation, shape }) {
-  const first = await snapCandidate(
+// Path length scales roughly linearly with the loop's radius, so one
+// correction pass - regenerate at a rescaled distance based on the measured
+// error - gets noticeably closer to the requested distance.
+async function planWithDistanceCorrection(start, distanceKm, rotation, shape) {
+  const first = await planCandidate(
     generateLoopRoute(start, distanceKm, rotation, shape, POINTS_PER_ROUTE)
   );
   if (first.distanceKm <= 0) return first;
@@ -55,7 +51,7 @@ async function buildCandidate(start, distanceKm, { rotation, shape }) {
   if (errorRatio < 0.08) return first;
 
   const scale = distanceKm / first.distanceKm;
-  const corrected = await snapCandidate(
+  const corrected = await planCandidate(
     generateLoopRoute(start, distanceKm * scale, rotation, shape, POINTS_PER_ROUTE)
   );
 
@@ -64,39 +60,45 @@ async function buildCandidate(start, distanceKm, { rotation, shape }) {
   return correctedError < firstError ? corrected : first;
 }
 
-export async function findRouteSuggestions(start, distanceKm, terrain) {
-  const snapped = await Promise.all(
-    CANDIDATES.map((c) => buildCandidate(start, distanceKm, c))
-  );
+async function withElevation(route) {
+  const samples = resamplePath(route.points, ELEVATION_SAMPLE_POINTS);
+  const elevations = await fetchElevations(samples);
+  const gainM = elevationGain(elevations);
+  return {
+    points: route.points,
+    distanceKm: route.distanceKm,
+    elevationGainM: gainM,
+    estimatedMinutes: estimateMinutes(route.distanceKm, gainM),
+    terrain: classify(gainM, route.distanceKm),
+  };
+}
 
-  // Resample each road-following route down to a consistent point count
-  // before batching elevation lookups.
-  const elevationSamples = snapped.map((r) => resamplePath(r.points, ELEVATION_SAMPLE_POINTS));
-  const flatElevations = await fetchElevations(elevationSamples.flat());
+// Generates the `index`-th suggestion for this search (0-based). Each index
+// gets a distinct rotation via the golden angle, so repeated calls with
+// increasing indexes produce an effectively unlimited stream of varied
+// suggestions rather than a fixed pool. For a specific terrain preference,
+// a few rotations near that index are tried and the best match is kept.
+export async function generateRouteSuggestion(start, distanceKm, terrain, index) {
+  const attempts = terrain === 'any' ? 1 : TERRAIN_SEARCH_ATTEMPTS;
+  const shapes = [0, 0.6, -0.6];
 
-  let cursor = 0;
-  const suggestions = snapped.map((route, idx) => {
-    const elevations = flatElevations.slice(cursor, cursor + ELEVATION_SAMPLE_POINTS);
-    cursor += ELEVATION_SAMPLE_POINTS;
+  let best = null;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const slot = index * attempts + attempt;
+    const rotation = (slot * GOLDEN_ANGLE_DEG) % 360;
+    const shape = shapes[slot % shapes.length];
 
-    const gainM = elevationGain(elevations);
-    const terrainType = classify(gainM, route.distanceKm);
+    const route = await planWithDistanceCorrection(start, distanceKm, rotation, shape);
+    const candidate = await withElevation(route);
 
-    return {
-      id: `route-${idx}`,
-      points: route.points,
-      distanceKm: route.distanceKm,
-      elevationGainM: gainM,
-      estimatedMinutes: estimateMinutes(route.distanceKm, gainM),
-      terrain: terrainType,
-    };
-  });
-
-  if (terrain === 'flat') {
-    return suggestions.sort((a, b) => a.elevationGainM - b.elevationGainM);
+    if (terrain === 'any') return { id: `route-${index}`, ...candidate };
+    if (
+      !best ||
+      (terrain === 'flat' && candidate.elevationGainM < best.elevationGainM) ||
+      (terrain === 'hilly' && candidate.elevationGainM > best.elevationGainM)
+    ) {
+      best = candidate;
+    }
   }
-  if (terrain === 'hilly') {
-    return suggestions.sort((a, b) => b.elevationGainM - a.elevationGainM);
-  }
-  return suggestions;
+  return { id: `route-${index}`, ...best };
 }

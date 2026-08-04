@@ -44,9 +44,14 @@ function FindModeControls({
   onFindRoutes,
   loading,
   suggestions,
-  selectedRouteId,
-  setSelectedRouteId,
+  currentIndex,
+  onPrevSuggestion,
+  onNextSuggestion,
+  maxSuggestions,
 }) {
+  const route = currentIndex >= 0 ? suggestions[currentIndex] : null;
+  const atLastGenerated = currentIndex === suggestions.length - 1;
+  const nextDisabled = loading || (atLastGenerated && suggestions.length >= maxSuggestions);
   return (
     <div className="sidebar-section">
       <h2>Find Route</h2>
@@ -97,60 +102,42 @@ function FindModeControls({
       {loading && (
         <div className="loading-indicator">
           <span className="spinner" />
-          Fetching elevation data…
+          {route ? 'Finding another route…' : 'Fetching route data…'}
         </div>
       )}
 
-      {suggestions.length > 0 &&
-        (() => {
-          const currentIndex = Math.max(
-            0,
-            suggestions.findIndex((r) => r.id === selectedRouteId)
-          );
-          const route = suggestions[currentIndex];
-          const goTo = (index) => {
-            const wrapped = (index + suggestions.length) % suggestions.length;
-            setSelectedRouteId(suggestions[wrapped].id);
-          };
-          return (
-            <div className="route-nav">
-              <div className="route-nav-header">
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => goTo(currentIndex - 1)}
-                  disabled={suggestions.length < 2}
-                >
-                  Prev
-                </button>
-                <span className="hint">
-                  Route {currentIndex + 1} of {suggestions.length}
-                </span>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => goTo(currentIndex + 1)}
-                  disabled={suggestions.length < 2}
-                >
-                  Next
-                </button>
-              </div>
-              <div className="route-card route-card--selected">
-                <div className="route-card-title">{route.terrain}</div>
-                <div className="stat-row">
-                  <span>Distance</span>
-                  <strong>{route.distanceKm.toFixed(2)} km</strong>
-                </div>
-                <div className="stat-row">
-                  <span>Elevation gain</span>
-                  <strong>{Math.round(route.elevationGainM)} m</strong>
-                </div>
-                <div className="stat-row">
-                  <span>Est. time</span>
-                  <strong>{formatMinutes(route.estimatedMinutes)}</strong>
-                </div>
-              </div>
+      {route && (
+        <div className="route-nav">
+          <div className="route-nav-header">
+            <button
+              className="btn btn-secondary"
+              onClick={onPrevSuggestion}
+              disabled={loading || currentIndex === 0}
+            >
+              Prev
+            </button>
+            <span className="hint">Route {currentIndex + 1}</span>
+            <button className="btn btn-secondary" onClick={onNextSuggestion} disabled={nextDisabled}>
+              Next
+            </button>
+          </div>
+          <div className="route-card route-card--selected">
+            <div className="route-card-title">{route.terrain}</div>
+            <div className="stat-row">
+              <span>Distance</span>
+              <strong>{route.distanceKm.toFixed(2)} km</strong>
             </div>
-          );
-        })()}
+            <div className="stat-row">
+              <span>Elevation gain</span>
+              <strong>{Math.round(route.elevationGainM)} m</strong>
+            </div>
+            <div className="stat-row">
+              <span>Est. time</span>
+              <strong>{formatMinutes(route.estimatedMinutes)}</strong>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
