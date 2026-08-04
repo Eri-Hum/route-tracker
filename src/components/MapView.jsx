@@ -12,7 +12,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-const DEFAULT_CENTER = [51.505, -0.09];
+const DEFAULT_CENTER = [57.7089, 11.9746]; // Gothenburg, Sweden
 
 function RecenterOnPosition({ position }) {
   const map = useMap();

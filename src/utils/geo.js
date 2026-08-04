@@ -1,5 +1,7 @@
 // Geometry helpers for generating circular loop routes.
 
+import { haversineDistance } from './haversine';
+
 const EARTH_RADIUS_KM = 6371;
 
 function toRad(deg) {
@@ -50,4 +52,30 @@ export function generateLoopRoute(start, distanceKm, rotationDeg, shapeVariant, 
   points[0] = start;
 
   return points;
+}
+
+// Pick `numSamples` points evenly spaced (by distance) along a path. Used to
+// get a manageable, consistent number of points for elevation lookups from a
+// road-snapped route that may have hundreds of vertices.
+export function resamplePath(points, numSamples) {
+  const cumulative = [0];
+  for (let i = 1; i < points.length; i++) {
+    cumulative.push(cumulative[i - 1] + haversineDistance(points[i - 1], points[i]));
+  }
+  const total = cumulative[cumulative.length - 1];
+
+  const result = [];
+  for (let i = 0; i < numSamples; i++) {
+    const target = (total * i) / (numSamples - 1);
+    let idx = cumulative.findIndex((d) => d >= target);
+    if (idx <= 0) idx = 1;
+
+    const d0 = cumulative[idx - 1];
+    const d1 = cumulative[idx];
+    const t = d1 === d0 ? 0 : (target - d0) / (d1 - d0);
+    const [lat0, lng0] = points[idx - 1];
+    const [lat1, lng1] = points[idx];
+    result.push([lat0 + (lat1 - lat0) * t, lng0 + (lng1 - lng0) * t]);
+  }
+  return result;
 }
