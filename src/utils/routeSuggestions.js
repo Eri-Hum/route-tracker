@@ -1,8 +1,10 @@
-import { generateLoopRoute } from './geo';
+import { generateLoopRoute, resamplePath } from './geo';
 import { pathDistance } from './haversine';
 import { fetchElevations, elevationGain } from './elevation';
+import { snapRouteToRoads } from './routing';
 
 const POINTS_PER_ROUTE = 20;
+const ELEVATION_SAMPLE_POINTS = 20;
 // Rotation + shape variant per candidate so the 3 suggestions look distinct.
 const CANDIDATES = [
   { rotation: 0, shape: 0 },
@@ -23,31 +25,43 @@ function classify(gainM, distanceKm) {
   return gainPerKm < 8 ? 'flat' : 'hilly';
 }
 
+// Snap a candidate loop onto the real road/path network. Falls back to the
+// raw geometric loop if the routing service is unavailable, so a single
+// failed request doesn't sink the whole suggestion set.
+async function snapCandidate(points) {
+  try {
+    return await snapRouteToRoads(points);
+  } catch {
+    return { points, distanceKm: pathDistance(points) };
+  }
+}
+
 export async function findRouteSuggestions(start, distanceKm, terrain) {
   const candidateRoutes = CANDIDATES.map((c) =>
     generateLoopRoute(start, distanceKm, c.rotation, c.shape, POINTS_PER_ROUTE)
   );
 
-  // Batch every point from every candidate into as few API calls as possible.
-  const flatPoints = candidateRoutes.flat();
-  const flatElevations = await fetchElevations(flatPoints);
+  const snapped = await Promise.all(candidateRoutes.map(snapCandidate));
+
+  // Resample each road-following route down to a consistent point count
+  // before batching elevation lookups.
+  const elevationSamples = snapped.map((r) => resamplePath(r.points, ELEVATION_SAMPLE_POINTS));
+  const flatElevations = await fetchElevations(elevationSamples.flat());
 
   let cursor = 0;
-  const suggestions = candidateRoutes.map((points, idx) => {
-    const elevations = flatElevations.slice(cursor, cursor + points.length);
-    cursor += points.length;
+  const suggestions = snapped.map((route, idx) => {
+    const elevations = flatElevations.slice(cursor, cursor + ELEVATION_SAMPLE_POINTS);
+    cursor += ELEVATION_SAMPLE_POINTS;
 
     const gainM = elevationGain(elevations);
-    const distanceKmActual = pathDistance(points);
-    const terrainType = classify(gainM, distanceKmActual);
+    const terrainType = classify(gainM, route.distanceKm);
 
     return {
       id: `route-${idx}`,
-      points,
-      elevations,
-      distanceKm: distanceKmActual,
+      points: route.points,
+      distanceKm: route.distanceKm,
       elevationGainM: gainM,
-      estimatedMinutes: estimateMinutes(distanceKmActual, gainM),
+      estimatedMinutes: estimateMinutes(route.distanceKm, gainM),
       terrain: terrainType,
     };
   });

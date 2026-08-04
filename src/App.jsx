@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import MapView from './components/MapView';
-import ElevationChart from './components/ElevationChart';
 import { findRouteSuggestions } from './utils/routeSuggestions';
 import './App.css';
 
@@ -79,8 +78,6 @@ function App() {
     }
   };
 
-  const selectedRoute = suggestions.find((r) => r.id === selectedRouteId);
-
   return (
     <div className="app">
       <Sidebar
@@ -128,7 +125,6 @@ function App() {
           </button>
         )}
         {findError && <div className="toast toast-error">{findError}</div>}
-        {mode === 'find' && selectedRoute && <ElevationChart route={selectedRoute} />}
       </main>
     </div>
   );

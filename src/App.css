@@ -239,18 +239,6 @@ select {
   cursor: crosshair;
 }
 
-.elevation-chart {
-  background: #1b1e24;
-  border-top: 1px solid #2e313a;
-  padding: 10px 16px 4px;
-}
-
-.elevation-chart h3 {
-  font-size: 14px;
-  margin: 0 0 4px;
-  color: #c3c9d1;
-}
-
 .toast {
   position: absolute;
   top: 12px;
