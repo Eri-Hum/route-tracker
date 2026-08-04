@@ -35,14 +35,20 @@ export function destinationPoint([lat, lng], bearingDeg, distanceKm) {
 // Build a closed loop route starting/ending at `start`, targeting a total
 // distance of `distanceKm`, rotated by `rotationDeg` and with a shape
 // variation so multiple suggestions look different.
-export function generateLoopRoute(start, distanceKm, rotationDeg, shapeVariant, numPoints = 24) {
+//
+// `numPoints` should stay small (single digits) when these points are used
+// as waypoints for a road router: a router connects waypoints in order via
+// the shortest street path between each pair, so many closely-spaced points
+// force it to hop between adjacent parallel streets instead of following a
+// natural route.
+export function generateLoopRoute(start, distanceKm, rotationDeg, shapeVariant, numPoints = 8) {
   const radiusKm = distanceKm / (2 * Math.PI);
   const points = [];
 
   for (let i = 0; i <= numPoints; i++) {
     const angle = (360 * i) / numPoints;
     // Modulate the radius slightly per shape variant to make routes distinct.
-    const wobble = 1 + shapeVariant * 0.25 * Math.sin(toRad(angle * 2));
+    const wobble = 1 + shapeVariant * 0.15 * Math.sin(toRad(angle * 2));
     const bearing = angle + rotationDeg;
     const dist = radiusKm * wobble;
     points.push(destinationPoint(start, bearing, dist));

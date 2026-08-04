@@ -3,7 +3,10 @@ import { pathDistance } from './haversine';
 import { fetchElevations, elevationGain } from './elevation';
 import { snapRouteToRoads } from './routing';
 
-const POINTS_PER_ROUTE = 20;
+// Kept small: these become routing waypoints, and too many closely-spaced
+// points forces the router to zigzag between parallel streets instead of
+// following a natural path (see generateLoopRoute).
+const POINTS_PER_ROUTE = 8;
 const ELEVATION_SAMPLE_POINTS = 20;
 // Rotation + shape variant per candidate so the 3 suggestions look distinct.
 const CANDIDATES = [
