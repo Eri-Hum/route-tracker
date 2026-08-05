@@ -1,8 +1,10 @@
 .app {
-  /* How much room the sheet claims at the bottom, and therefore how far
-     above it the FABs float. A single source of truth so the sheet and
-     the FABs shrink together when the sheet collapses, instead of the
-     FABs staying anchored to where the expanded sheet used to end. */
+  /* How far above the sheet the FABs float, kept in sync with the sheet's
+     *actual* rendered height (via ResizeObserver, see App.jsx) rather than
+     assumed - the sheet is sized to its own content now, not a fixed
+     fraction of the viewport, so a fixed guess here would drift from
+     reality the moment Draw and Find modes have different amounts of
+     content. These are only the fallback before that measurement runs. */
   --panel-size: 58vh;
   position: relative;
   width: 100%;
@@ -109,7 +111,11 @@
   left: 0;
   right: 0;
   bottom: 0;
-  height: var(--panel-size);
+  /* Content-driven, not a fixed viewport fraction: Draw mode's handful of
+     controls shouldn't claim as much screen as Find mode's longer form.
+     max-height is just a safety cap for whichever mode's content is
+     tallest (a route result with a warning line, say). */
+  height: auto;
   max-height: 82vh;
   z-index: 400;
   background: var(--surface);
@@ -118,6 +124,11 @@
   overflow: hidden;
   display: flex;
   transition: height 0.25s ease;
+}
+
+.sheet-collapsed .sheet {
+  height: 44px;
+  max-height: 44px;
 }
 
 .sheet-content {
@@ -533,7 +544,6 @@ input[type='number']:focus {
     left: 24px;
     right: auto;
     width: 380px;
-    height: auto;
     max-height: calc(100vh - 84px - 24px);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-float);
@@ -542,8 +552,7 @@ input[type='number']:focus {
   /* The floating panel doesn't sit above the FABs here, so collapsing it
      doesn't need to move them - just shrink the panel itself. */
   .sheet-collapsed .sheet {
-    height: 48px;
-    max-height: 48px;
+    max-height: 44px;
   }
 
   .fab--pencil,

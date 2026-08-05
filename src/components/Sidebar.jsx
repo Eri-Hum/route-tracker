@@ -45,6 +45,8 @@ function Segmented({ options, value, onChange, label }) {
 function DrawModeControls({
   drawnDistanceKm,
   drawnSegmentCount,
+  drawnElevationGainM,
+  drawnElevationLoading,
   onClear,
   onUndoSegment,
   penActive,
@@ -72,6 +74,21 @@ function DrawModeControls({
             <span className="stat-unit">km</span>
             <span className="stat-chip">{drawnSegmentCount} stroke{drawnSegmentCount === 1 ? '' : 's'}</span>
           </div>
+          {drawnElevationLoading ? (
+            <div className="loading-indicator">
+              <span className="spinner" />
+              Checking elevation…
+            </div>
+          ) : (
+            drawnElevationGainM !== null && (
+              <div className="stat-grid">
+                <div className="stat-tile">
+                  <span className="stat-tile-label">Elevation gain</span>
+                  <span className="stat-tile-value">{Math.round(drawnElevationGainM)} m</span>
+                </div>
+              </div>
+            )
+          )}
           <div className="button-row">
             <button className="btn btn-secondary" onClick={onUndoSegment}>
               Undo stroke
@@ -417,6 +434,8 @@ export default function Sidebar({ mode, onToggleSheet, sheetCollapsed, ...props 
           <DrawModeControls
             drawnDistanceKm={props.drawnDistanceKm}
             drawnSegmentCount={props.drawnSegmentCount}
+            drawnElevationGainM={props.drawnElevationGainM}
+            drawnElevationLoading={props.drawnElevationLoading}
             onClear={props.onClearDrawnRoute}
             onUndoSegment={props.onUndoSegment}
             penActive={props.penActive}

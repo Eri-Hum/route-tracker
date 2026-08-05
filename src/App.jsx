@@ -1,15 +1,22 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import MapView from './components/MapView';
 import { generateRouteSuggestion } from './utils/routeSuggestions';
 import { getActivity, DEFAULT_ACTIVITY } from './utils/activities';
 import { pathDistance } from './utils/haversine';
+import { resamplePath } from './utils/geo';
+import { fetchElevations, elevationGain } from './utils/elevation';
 import './App.css';
 
 const DEFAULT_DISTANCE_KM = 5;
 // Soft cap on how many suggestions a single search can generate, mostly to
 // avoid hammering the free routing/elevation APIs from one session.
 const MAX_SUGGESTIONS = 12;
+// Same sample count Find mode uses for its own elevation lookups.
+const DRAWN_ELEVATION_SAMPLES = 20;
+// Wait for drawing to actually pause before asking OpenTopoData anything -
+// each stroke, undo, or clear would otherwise fire its own request.
+const DRAWN_ELEVATION_DEBOUNCE_MS = 500;
 
 function App() {
   const [mode, setMode] = useState('draw');
@@ -25,6 +32,27 @@ function App() {
   // drawing, or just panning around - and only a deliberate tap brings it
   // back rather than reappearing on its own.
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
+
+  // The sheet sizes itself to whatever it's actually showing (see
+  // .sheet's height:auto), rather than claiming a fixed slice of the
+  // screen regardless of content - Draw mode's handful of controls don't
+  // need Find mode's share of it. The FABs float just above the sheet, so
+  // they need to know its real height too; this mirrors that measured
+  // value into --panel-size (read by the FABs' CSS) instead of guessing
+  // at it, so they track wherever the sheet's edge actually ends up.
+  const appRef = useRef(null);
+  const sheetRef = useRef(null);
+  useEffect(() => {
+    const appEl = appRef.current;
+    const sheetEl = sheetRef.current;
+    if (!appEl || !sheetEl) return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      appEl.style.setProperty('--panel-size', `${entry.contentRect.height}px`);
+    });
+    observer.observe(sheetEl);
+    return () => observer.disconnect();
+  }, []);
 
   // Find mode state
   const [userPosition, setUserPosition] = useState(null);
@@ -50,14 +78,48 @@ function App() {
   const drawnDistanceKm = useMemo(() => pathDistance(drawnPoints), [drawnPoints]);
   const resumeFrom = drawnPoints.length > 0 ? drawnPoints[drawnPoints.length - 1] : null;
 
+  // Total climb along the drawn route, from the same elevation source Find
+  // mode uses. Debounced so a burst of strokes/undos only fires one lookup
+  // once things settle, and cancelled rather than raced if the route
+  // changes again before a request comes back.
+  const [drawnElevationGainM, setDrawnElevationGainM] = useState(null);
+  const [drawnElevationLoading, setDrawnElevationLoading] = useState(false);
+  const elevationRequestRef = useRef(0);
+
+  useEffect(() => {
+    if (drawnPoints.length < 2) {
+      setDrawnElevationGainM(null);
+      setDrawnElevationLoading(false);
+      return;
+    }
+
+    const requestId = ++elevationRequestRef.current;
+    setDrawnElevationLoading(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const samples = resamplePath(drawnPoints, DRAWN_ELEVATION_SAMPLES);
+        const elevations = await fetchElevations(samples);
+        if (elevationRequestRef.current !== requestId) return; // superseded
+        setDrawnElevationGainM(elevationGain(elevations));
+      } catch {
+        if (elevationRequestRef.current === requestId) setDrawnElevationGainM(null);
+      } finally {
+        if (elevationRequestRef.current === requestId) setDrawnElevationLoading(false);
+      }
+    }, DRAWN_ELEVATION_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [drawnPoints]);
+
   // Each stroke is appended, so the route survives between strokes and can
   // be built up while panning and zooming in between. The pen switches off
-  // afterwards so the map is immediately movable again.
+  // afterwards so the map is immediately movable again, but the sheet stays
+  // exactly as it was - opening it back up is left to the handle, not
+  // something that happens on its own after every stroke.
   const handleRouteComplete = useCallback((latlngs) => {
     setDrawnSegments((prev) => [...prev, latlngs]);
     setPenActive(false);
-    // Bring the sheet back so the updated distance is visible immediately.
-    setSheetCollapsed(false);
   }, []);
 
   const handleClearDrawnRoute = () => setDrawnSegments([]);
@@ -66,9 +128,9 @@ function App() {
   const handleTogglePen = () => {
     setPenActive((p) => {
       const next = !p;
-      // Collapse the instant drawing starts so the map is unobstructed;
-      // bring the sheet back the instant it stops.
-      setSheetCollapsed(next);
+      // Collapse the instant drawing starts, so the map is unobstructed;
+      // stopping does not reopen it - same reasoning as above.
+      if (next) setSheetCollapsed(true);
       return next;
     });
   };
@@ -180,7 +242,7 @@ function App() {
   };
 
   return (
-    <div className={`app ${sheetCollapsed ? 'sheet-collapsed' : ''}`}>
+    <div ref={appRef} className={`app ${sheetCollapsed ? 'sheet-collapsed' : ''}`}>
       <MapView
         mode={mode}
         drawingActive={penActive}
@@ -244,12 +306,14 @@ function App() {
 
       {findError && <div className="toast toast-error">{findError}</div>}
 
-      <div className="sheet">
+      <div ref={sheetRef} className="sheet">
         <Sidebar
           mode={mode}
           onToggleSheet={handleToggleSheet}
           sheetCollapsed={sheetCollapsed}
           drawnDistanceKm={drawnDistanceKm}
+          drawnElevationGainM={drawnElevationGainM}
+          drawnElevationLoading={drawnElevationLoading}
           drawnSegmentCount={drawnSegments.length}
           onClearDrawnRoute={handleClearDrawnRoute}
           onUndoSegment={handleUndoSegment}
