@@ -1,9 +1,18 @@
 .app {
+  /* How much room the sheet claims at the bottom, and therefore how far
+     above it the FABs float. A single source of truth so the sheet and
+     the FABs shrink together when the sheet collapses, instead of the
+     FABs staying anchored to where the expanded sheet used to end. */
+  --panel-size: 58vh;
   position: relative;
   width: 100%;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
+}
+
+.app.sheet-collapsed {
+  --panel-size: 44px;
 }
 
 .draw-canvas {
@@ -84,7 +93,8 @@
 .fab--pencil,
 .fab--locate {
   right: 16px;
-  bottom: calc(var(--sheet-height-mobile, 58vh) + 16px);
+  bottom: calc(var(--panel-size) + 16px);
+  transition: bottom 0.25s ease;
 }
 
 .fab--active {
@@ -95,12 +105,11 @@
 /* ---------- Bottom sheet (mobile) / floating panel (desktop) ---------- */
 
 .sheet {
-  --sheet-height-mobile: 58vh;
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  height: var(--sheet-height-mobile);
+  height: var(--panel-size);
   max-height: 82vh;
   z-index: 400;
   background: var(--surface);
@@ -108,6 +117,7 @@
   box-shadow: 0 -12px 32px rgba(16, 20, 28, 0.14);
   overflow: hidden;
   display: flex;
+  transition: height 0.25s ease;
 }
 
 .sheet-content {
@@ -118,6 +128,22 @@
   flex-direction: column;
   gap: 4px;
   padding: 6px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Collapsed: only the handle stays visible and tappable, everything else
+   in the sheet is hidden rather than just clipped so it can't be focused
+   or read by a screen reader while out of view. */
+.sheet-collapsed .sheet {
+  cursor: pointer;
+}
+
+.sheet-collapsed .sheet-content > *:not(.sheet-handle) {
+  display: none;
+}
+
+.sheet-collapsed .sheet-handle {
+  width: 44px;
+  background: var(--ink-faint);
 }
 
 .sheet-handle {
@@ -478,7 +504,6 @@ input[type='number']:focus {
 
 @media (min-width: 860px) {
   .sheet {
-    --sheet-height-mobile: 0px;
     top: 84px;
     bottom: auto;
     left: 24px;
@@ -488,6 +513,13 @@ input[type='number']:focus {
     max-height: calc(100vh - 84px - 24px);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-float);
+  }
+
+  /* The floating panel doesn't sit above the FABs here, so collapsing it
+     doesn't need to move them - just shrink the panel itself. */
+  .sheet-collapsed .sheet {
+    height: 48px;
+    max-height: 48px;
   }
 
   .fab--pencil,

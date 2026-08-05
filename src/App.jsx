@@ -20,6 +20,12 @@ function App() {
   const [drawnSegments, setDrawnSegments] = useState([]);
   const [penActive, setPenActive] = useState(false);
 
+  // The sheet gets in the way of the one thing it sits on top of, so it
+  // collapses to a small handle while the map is actually being used -
+  // drawing, or just panning around - and only a deliberate tap brings it
+  // back rather than reappearing on its own.
+  const [sheetCollapsed, setSheetCollapsed] = useState(false);
+
   // Find mode state
   const [userPosition, setUserPosition] = useState(null);
   const [geoError, setGeoError] = useState(null);
@@ -33,6 +39,9 @@ function App() {
 
   const handleToggleMode = () => {
     setPenActive(false);
+    // Switching modes from the topbar is a deliberate request to see that
+    // mode's controls, so it always brings the sheet back.
+    setSheetCollapsed(false);
     setMode((m) => (m === 'draw' ? 'find' : 'draw'));
   };
 
@@ -47,12 +56,28 @@ function App() {
   const handleRouteComplete = useCallback((latlngs) => {
     setDrawnSegments((prev) => [...prev, latlngs]);
     setPenActive(false);
+    // Bring the sheet back so the updated distance is visible immediately.
+    setSheetCollapsed(false);
   }, []);
 
   const handleClearDrawnRoute = () => setDrawnSegments([]);
   const handleUndoSegment = () => setDrawnSegments((prev) => prev.slice(0, -1));
 
-  const handleTogglePen = () => setPenActive((p) => !p);
+  const handleTogglePen = () => {
+    setPenActive((p) => {
+      const next = !p;
+      // Collapse the instant drawing starts so the map is unobstructed;
+      // bring the sheet back the instant it stops.
+      setSheetCollapsed(next);
+      return next;
+    });
+  };
+
+  // Panning the map is the other case the sheet should get out of the way
+  // for. A programmatic move (recentring on a fresh location fix) does not
+  // fire Leaflet's drag events, so this only reacts to an actual touch/drag.
+  const handleMapDragStart = useCallback(() => setSheetCollapsed(true), []);
+  const handleExpandSheet = () => setSheetCollapsed(false);
 
   const handleLocate = () => {
     setGeoError(null);
@@ -135,11 +160,12 @@ function App() {
   };
 
   return (
-    <div className="app">
+    <div className={`app ${sheetCollapsed ? 'sheet-collapsed' : ''}`}>
       <MapView
         mode={mode}
         drawingActive={penActive}
         onRouteComplete={handleRouteComplete}
+        onMapDragStart={handleMapDragStart}
         drawnPoints={drawnPoints}
         resumeFrom={resumeFrom}
         userPosition={userPosition}
@@ -198,7 +224,18 @@ function App() {
 
       {findError && <div className="toast toast-error">{findError}</div>}
 
-      <div className="sheet">
+      <div
+        className="sheet"
+        onClick={sheetCollapsed ? handleExpandSheet : undefined}
+        role={sheetCollapsed ? 'button' : undefined}
+        tabIndex={sheetCollapsed ? 0 : undefined}
+        aria-label={sheetCollapsed ? 'Show controls' : undefined}
+        onKeyDown={
+          sheetCollapsed
+            ? (e) => (e.key === 'Enter' || e.key === ' ') && handleExpandSheet()
+            : undefined
+        }
+      >
         <Sidebar
           mode={mode}
           drawnDistanceKm={drawnDistanceKm}
