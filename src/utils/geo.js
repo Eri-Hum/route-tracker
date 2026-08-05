@@ -1,6 +1,6 @@
 // Geometry helpers for generating circular loop routes.
 
-import { haversineDistance } from './haversine';
+import { haversineDistance, pathDistance } from './haversine';
 
 const EARTH_RADIUS_KM = 6371;
 
@@ -32,32 +32,87 @@ export function destinationPoint([lat, lng], bearingDeg, distanceKm) {
   return [toDeg(lat2), toDeg(lng2)];
 }
 
-// Build a closed loop route starting/ending at `start`, targeting a total
-// distance of `distanceKm`, rotated by `rotationDeg` and with a shape
-// variation so multiple suggestions look different.
-//
-// `numPoints` should stay small (single digits) when these points are used
-// as waypoints for a road router: a router connects waypoints in order via
-// the shortest street path between each pair, so many closely-spaced points
-// force it to hop between adjacent parallel streets instead of following a
-// natural route.
-export function generateLoopRoute(start, distanceKm, rotationDeg, shapeVariant, numPoints = 8) {
-  const radiusKm = distanceKm / (2 * Math.PI);
+// Waypoints of a ring that passes through `start`, walked once and closing
+// back on the start.
+function ringThrough(start, radiusKm, rotationDeg, shapeVariant, numPoints) {
+  // Offset the ring's centre one radius away from the start, so the start
+  // lies *on* the ring. Centring the ring on the start instead would force
+  // every route to run a full radius out and back again just to reach it -
+  // a built-in out-and-back spur on every single suggestion.
+  const center = destinationPoint(start, rotationDeg, radiusKm);
+  const startBearing = rotationDeg + 180;
   const points = [];
 
   for (let i = 0; i <= numPoints; i++) {
-    const angle = (360 * i) / numPoints;
+    const angle = startBearing + (360 * i) / numPoints;
     // Modulate the radius slightly per shape variant to make routes distinct.
     const wobble = 1 + shapeVariant * 0.15 * Math.sin(toRad(angle * 2));
-    const bearing = angle + rotationDeg;
-    const dist = radiusKm * wobble;
-    points.push(destinationPoint(start, bearing, dist));
+    points.push(destinationPoint(center, angle, radiusKm * wobble));
   }
-  // Ensure the loop closes exactly on the start point.
-  points[points.length - 1] = start;
+  // Anchor both ends exactly on the start location.
   points[0] = start;
+  points[points.length - 1] = start;
 
   return points;
+}
+
+// Build a closed loop route starting and ending at `start`, targeting a
+// total distance of `distanceKm`, rotated by `rotationDeg` and with a shape
+// variation so multiple suggestions look different.
+//
+// `numPoints` should stay small when these points are used as waypoints for
+// a road router. Each waypoint is a hard constraint the route must pass
+// through, so every extra one is another chance to force an awkward detour;
+// a handful of well-spread points lets each leg be a natural shortest path.
+export function generateLoopRoute(start, distanceKm, rotationDeg, shapeVariant, numPoints = 5) {
+  // A ring sampled at few points is a polygon, whose perimeter falls short
+  // of the circle it is inscribed in - by ~10% at 5 points. Measure the
+  // polygon we actually produced and rescale, since its length varies
+  // linearly with the radius.
+  const nominalRadiusKm = distanceKm / (2 * Math.PI);
+  const nominal = ringThrough(start, nominalRadiusKm, rotationDeg, shapeVariant, numPoints);
+  const nominalLength = pathDistance(nominal);
+  if (nominalLength === 0) return nominal;
+
+  const radiusKm = nominalRadiusKm * (distanceKm / nominalLength);
+  return ringThrough(start, radiusKm, rotationDeg, shapeVariant, numPoints);
+}
+
+// Fraction of a route's length that gets covered more than once.
+//
+// This is the "detour" measure: running down a dead-end street and back, or
+// retracing a stretch to reach the next waypoint, traverses the same
+// segments twice. A clean loop covers each segment once and scores ~0,
+// while a route full of out-and-back spurs scores high. Segment identity is
+// keyed on coordinates rounded to ~1 m and made direction-independent, so a
+// stretch counts as repeated whichever way it is travelled.
+export function overlapRatio(points) {
+  const lengthByKey = new Map();
+  const countByKey = new Map();
+  let total = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const length = haversineDistance(a, b);
+    if (length === 0) continue;
+
+    const endpoints = [a, b]
+      .map(([lat, lng]) => `${lat.toFixed(5)},${lng.toFixed(5)}`)
+      .sort();
+    const key = endpoints.join('|');
+
+    lengthByKey.set(key, length);
+    countByKey.set(key, (countByKey.get(key) || 0) + 1);
+    total += length;
+  }
+  if (total === 0) return 0;
+
+  let repeated = 0;
+  for (const [key, count] of countByKey) {
+    if (count > 1) repeated += (count - 1) * lengthByKey.get(key);
+  }
+  return repeated / total;
 }
 
 // Pick `numSamples` points evenly spaced (by distance) along a path. Used to
