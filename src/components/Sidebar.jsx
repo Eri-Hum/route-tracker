@@ -102,7 +102,7 @@ function FindModeControls({
       {loading && (
         <div className="loading-indicator">
           <span className="spinner" />
-          {route ? 'Finding another route…' : 'Fetching route data…'}
+          {route ? 'Finding another route…' : 'Matching your distance…'}
         </div>
       )}
 
@@ -135,6 +135,11 @@ function FindModeControls({
               <span>Est. time</span>
               <strong>{formatMinutes(route.estimatedMinutes)}</strong>
             </div>
+            {route.offTarget && (
+              <p className="hint">
+                Closest loop the streets around here allow — try Next for another.
+              </p>
+            )}
           </div>
         </div>
       )}
