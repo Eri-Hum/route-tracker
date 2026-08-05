@@ -6,6 +6,7 @@ import {
   Marker,
   Popup,
   useMap,
+  useMapEvents,
 } from 'react-leaflet';
 import { useEffect } from 'react';
 import L from 'leaflet';
@@ -32,10 +33,18 @@ function RecenterOnPosition({ position }) {
   return null;
 }
 
+// Fires only for an actual touch/mouse drag - not for the programmatic
+// setView() above - so recentring on a fresh location fix never triggers it.
+function NotifyOnDrag({ onDragStart }) {
+  useMapEvents({ dragstart: () => onDragStart?.() });
+  return null;
+}
+
 export default function MapView({
   mode,
   drawingActive,
   onRouteComplete,
+  onMapDragStart,
   drawnPoints,
   resumeFrom,
   userPosition,
@@ -62,6 +71,8 @@ export default function MapView({
         subdomains="abcd"
         maxZoom={20}
       />
+
+      <NotifyOnDrag onDragStart={onMapDragStart} />
 
       <DrawCanvas
         active={mode === 'draw' && drawingActive}
