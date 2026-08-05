@@ -270,14 +270,30 @@ function ChevronIcon({ direction }) {
 // panning. A tap toggles whichever state it's in; a real drag is
 // directional, like pulling a real bottom sheet open or push it shut.
 //
-// Pointer events (not a plain onClick) track the drag so mouse and touch
-// share one code path. Click still fires afterwards - for the mouse/touch
-// tap case *and* for keyboard activation, which never dispatches pointer
-// events at all - so the actual state change happens there, once, reading
-// whatever the pointer handlers most recently measured.
+// The state change happens in pointerup, not in a click handler. That was
+// the original design, and it does work for a mouse - but on a touchscreen
+// it silently never fires for an actual drag: browsers only synthesize a
+// click after a touch that reads as a tap, not after one that moved like a
+// drag, regardless of touch-action or pointer capture. Since dragging is
+// the whole point of half this control, the mutation cannot depend on
+// click firing at all.
+//
+// Click is kept only for keyboard activation (Enter/Space on a focused
+// button), which never dispatches pointer events in the first place - and
+// is guarded against double-firing for mouse/touch, where a click always
+// follows pointerup for the same interaction.
 function SheetHandle({ onToggle }) {
   const startYRef = useRef(null);
   const dragDeltaRef = useRef(0);
+  const handledByPointerRef = useRef(false);
+
+  const decide = (delta) => {
+    if (Math.abs(delta) > HANDLE_DRAG_THRESHOLD) {
+      onToggle(delta > 0 ? 'collapse' : 'expand');
+    } else {
+      onToggle('toggle');
+    }
+  };
 
   const handlePointerDown = (e) => {
     startYRef.current = e.clientY;
@@ -297,15 +313,21 @@ function SheetHandle({ onToggle }) {
   const handlePointerUp = (e) => {
     startYRef.current = null;
     e.currentTarget.releasePointerCapture?.(e.pointerId);
-  };
-  const handleClick = () => {
     const delta = dragDeltaRef.current;
     dragDeltaRef.current = 0;
-    if (Math.abs(delta) > HANDLE_DRAG_THRESHOLD) {
-      onToggle(delta > 0 ? 'collapse' : 'expand');
-    } else {
-      onToggle('toggle');
+    handledByPointerRef.current = true;
+    decide(delta);
+  };
+  const handlePointerCancel = () => {
+    startYRef.current = null;
+    dragDeltaRef.current = 0;
+  };
+  const handleClick = () => {
+    if (handledByPointerRef.current) {
+      handledByPointerRef.current = false;
+      return;
     }
+    onToggle('toggle');
   };
 
   return (
@@ -316,7 +338,7 @@ function SheetHandle({ onToggle }) {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onClick={handleClick}
     >
       <span className="sheet-handle-bar" aria-hidden="true" />
