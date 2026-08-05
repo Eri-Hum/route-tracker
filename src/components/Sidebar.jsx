@@ -6,27 +6,53 @@ function formatMinutes(mins) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-function DrawModeControls({ drawnRoute, onClear, penActive, onTogglePen }) {
+function DrawModeControls({
+  drawnDistanceKm,
+  drawnSegmentCount,
+  onClear,
+  onUndoSegment,
+  penActive,
+  onTogglePen,
+}) {
+  const started = drawnSegmentCount > 0;
+
+  let hint;
+  if (penActive) {
+    hint = started
+      ? 'Draw on from the marked point. The map holds still until you stop.'
+      : 'Press and drag on the map to draw a path freehand.';
+  } else if (started) {
+    hint = 'Move and zoom the map freely, then draw again to carry on from the marker.';
+  } else {
+    hint = 'Move the map freely, then click "Start drawing" to draw a route.';
+  }
+
   return (
     <div className="sidebar-section">
       <h2>Draw Route</h2>
       <button className="btn btn-primary" onClick={onTogglePen}>
-        {penActive ? 'Stop drawing' : 'Start drawing'}
+        {penActive ? 'Stop drawing' : started ? 'Continue drawing' : 'Start drawing'}
       </button>
-      <p className="hint">
-        {penActive
-          ? 'Press and drag on the map to draw a path freehand.'
-          : 'Move the map freely, then click "Start drawing" to draw a route.'}
-      </p>
-      {drawnRoute ? (
+      <p className="hint">{hint}</p>
+
+      {started ? (
         <div className="stat-card">
           <div className="stat-row">
             <span>Distance</span>
-            <strong>{drawnRoute.distanceKm.toFixed(2)} km</strong>
+            <strong>{drawnDistanceKm.toFixed(2)} km</strong>
           </div>
-          <button className="btn btn-secondary" onClick={onClear}>
-            Clear
-          </button>
+          <div className="stat-row">
+            <span>Strokes</span>
+            <strong>{drawnSegmentCount}</strong>
+          </div>
+          <div className="button-row">
+            <button className="btn btn-secondary" onClick={onUndoSegment}>
+              Undo stroke
+            </button>
+            <button className="btn btn-secondary" onClick={onClear}>
+              Clear
+            </button>
+          </div>
         </div>
       ) : (
         <p className="hint">No route drawn yet.</p>
@@ -180,8 +206,10 @@ export default function Sidebar({ mode, onToggleMode, ...props }) {
 
       {mode === 'draw' ? (
         <DrawModeControls
-          drawnRoute={props.drawnRoute}
+          drawnDistanceKm={props.drawnDistanceKm}
+          drawnSegmentCount={props.drawnSegmentCount}
           onClear={props.onClearDrawnRoute}
+          onUndoSegment={props.onUndoSegment}
           penActive={props.penActive}
           onTogglePen={props.onTogglePen}
         />

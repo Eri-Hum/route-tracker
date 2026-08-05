@@ -118,6 +118,15 @@ select {
   color: #c3c9d1;
 }
 
+.button-row {
+  display: flex;
+  gap: 8px;
+}
+
+.button-row .btn {
+  flex: 1;
+}
+
 .loading-indicator {
   display: flex;
   align-items: center;

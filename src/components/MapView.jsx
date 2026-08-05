@@ -1,4 +1,12 @@
-import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-leaflet';
+import {
+  MapContainer,
+  TileLayer,
+  Polyline,
+  CircleMarker,
+  Marker,
+  Popup,
+  useMap,
+} from 'react-leaflet';
 import { useEffect } from 'react';
 import L from 'leaflet';
 import DrawCanvas from './DrawCanvas';
@@ -28,7 +36,8 @@ export default function MapView({
   mode,
   drawingActive,
   onRouteComplete,
-  drawnRoute,
+  drawnPoints,
+  resumeFrom,
   userPosition,
   route,
 }) {
@@ -43,10 +52,23 @@ export default function MapView({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      <DrawCanvas active={mode === 'draw' && drawingActive} onRouteComplete={onRouteComplete} />
+      <DrawCanvas
+        active={mode === 'draw' && drawingActive}
+        resumeFrom={resumeFrom}
+        onRouteComplete={onRouteComplete}
+      />
 
-      {mode === 'draw' && drawnRoute && (
-        <Polyline positions={drawnRoute.latlngs} pathOptions={{ color: '#e6402b', weight: 4 }} />
+      {mode === 'draw' && drawnPoints.length > 1 && (
+        <Polyline positions={drawnPoints} pathOptions={{ color: '#e6402b', weight: 4 }} />
+      )}
+
+      {/* Where the next stroke picks up, so it is clear where to carry on. */}
+      {mode === 'draw' && resumeFrom && (
+        <CircleMarker
+          center={resumeFrom}
+          radius={6}
+          pathOptions={{ color: '#fff', weight: 2, fillColor: '#e6402b', fillOpacity: 1 }}
+        />
       )}
 
       {mode === 'find' && userPosition && (

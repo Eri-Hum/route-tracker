@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import MapView from './components/MapView';
 import { generateRouteSuggestion } from './utils/routeSuggestions';
 import { getActivity, DEFAULT_ACTIVITY } from './utils/activities';
+import { pathDistance } from './utils/haversine';
 import './App.css';
 
 const DEFAULT_DISTANCE_KM = 5;
@@ -13,8 +14,10 @@ const MAX_SUGGESTIONS = 12;
 function App() {
   const [mode, setMode] = useState('draw');
 
-  // Draw mode state
-  const [drawnRoute, setDrawnRoute] = useState(null);
+  // Draw mode state. Strokes are kept separately rather than as one flat
+  // path so the last one can be taken back - drawing a route in stages is
+  // no use if a slip means starting over.
+  const [drawnSegments, setDrawnSegments] = useState([]);
   const [penActive, setPenActive] = useState(false);
 
   // Find mode state
@@ -33,17 +36,23 @@ function App() {
     setMode((m) => (m === 'draw' ? 'find' : 'draw'));
   };
 
-  const handleRouteComplete = useCallback((latlngs, distanceKmValue) => {
-    setDrawnRoute({ latlngs, distanceKm: distanceKmValue });
+  // The whole route so far, and where a new stroke would carry on from.
+  const drawnPoints = useMemo(() => drawnSegments.flat(), [drawnSegments]);
+  const drawnDistanceKm = useMemo(() => pathDistance(drawnPoints), [drawnPoints]);
+  const resumeFrom = drawnPoints.length > 0 ? drawnPoints[drawnPoints.length - 1] : null;
+
+  // Each stroke is appended, so the route survives between strokes and can
+  // be built up while panning and zooming in between. The pen switches off
+  // afterwards so the map is immediately movable again.
+  const handleRouteComplete = useCallback((latlngs) => {
+    setDrawnSegments((prev) => [...prev, latlngs]);
     setPenActive(false);
   }, []);
 
-  const handleClearDrawnRoute = () => setDrawnRoute(null);
+  const handleClearDrawnRoute = () => setDrawnSegments([]);
+  const handleUndoSegment = () => setDrawnSegments((prev) => prev.slice(0, -1));
 
-  const handleTogglePen = () => {
-    if (!penActive) setDrawnRoute(null);
-    setPenActive((p) => !p);
-  };
+  const handleTogglePen = () => setPenActive((p) => !p);
 
   const handleLocate = () => {
     setGeoError(null);
@@ -130,8 +139,10 @@ function App() {
       <Sidebar
         mode={mode}
         onToggleMode={handleToggleMode}
-        drawnRoute={drawnRoute}
+        drawnDistanceKm={drawnDistanceKm}
+        drawnSegmentCount={drawnSegments.length}
         onClearDrawnRoute={handleClearDrawnRoute}
+        onUndoSegment={handleUndoSegment}
         penActive={penActive}
         onTogglePen={handleTogglePen}
         userPosition={userPosition}
@@ -157,7 +168,8 @@ function App() {
           mode={mode}
           drawingActive={penActive}
           onRouteComplete={handleRouteComplete}
-          drawnRoute={drawnRoute}
+          drawnPoints={drawnPoints}
+          resumeFrom={resumeFrom}
           userPosition={userPosition}
           route={currentIndex >= 0 ? suggestions[currentIndex] : null}
         />
