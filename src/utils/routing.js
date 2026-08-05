@@ -2,7 +2,14 @@
 // OpenStreetMap Germany - no API key required.
 // https://routing.openstreetmap.de/about.html
 //
-// We use the "foot" profile since routes are for running/walking.
+// The "foot" profile is what keeps suggestions legal and safe to run: its
+// routable highway list covers primary through residential, service, track,
+// path, steps, pedestrian, footway and pier, and pointedly does *not*
+// include motorway, motorway_link, trunk or trunk_link. It also honours
+// access restrictions, refusing ways tagged no/private/agricultural/
+// forestry/delivery and foot=use_sidepath. Switching this endpoint to
+// another profile (routed-car, say) would silently start routing people
+// onto motorways, so it must not be changed casually.
 //
 // The central problem when generating a loop this way is that every
 // waypoint handed to the router is a *hard constraint*: the route must

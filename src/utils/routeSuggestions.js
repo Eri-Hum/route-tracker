@@ -1,5 +1,4 @@
 import { generateLoopRoute, resamplePath, overlapRatio } from './geo';
-import { pathDistance } from './haversine';
 import { fetchElevations, elevationGain } from './elevation';
 import { planRoadLoop } from './routing';
 
@@ -75,16 +74,15 @@ function pruneUnroutableWaypoints(waypoints, snapDistances) {
 // Route one skeleton. When `allowPrune` is set, retry without any waypoints
 // that turned out to be unroutable - worth one extra call while choosing a
 // shape, but skipped during distance tuning where the shape is already
-// settled and only its radius is moving. Falls back to the raw geometric
-// loop if the routing service is unavailable.
+// settled and only its radius is moving.
+//
+// Deliberately has no offline fallback. Returning the raw geometric loop
+// when routing is unavailable would hand back straight lines between
+// waypoints - a "route" cutting across motorways, railways and water, shown
+// with a distance and a climb as though someone could run it. A failure
+// here has to surface as a failure.
 async function planCandidate(waypoints, allowPrune) {
-  let plan;
-  try {
-    plan = await planRoadLoop(waypoints);
-  } catch {
-    return { points: waypoints, distanceKm: pathDistance(waypoints) };
-  }
-
+  const plan = await planRoadLoop(waypoints);
   if (!allowPrune) return plan;
 
   const pruned = pruneUnroutableWaypoints(waypoints, plan.snapDistances);
@@ -189,10 +187,17 @@ async function tuneDistance(start, target, winner) {
       scale = bestScale;
     }
 
-    const plan = await planCandidate(
-      generateLoopRoute(start, target * scale, rotation, shape, POINTS_PER_ROUTE),
-      false
-    );
+    let plan;
+    try {
+      plan = await planCandidate(
+        generateLoopRoute(start, target * scale, rotation, shape, POINTS_PER_ROUTE),
+        false
+      );
+    } catch {
+      // Tuning is an improvement on an already-valid route, so a failed
+      // step just ends the search rather than losing what we have.
+      break;
+    }
 
     // A measurement that lands on a distance we have already seen means the
     // network is stepping straight over the target at this orientation:
@@ -243,13 +248,23 @@ export async function generateRouteSuggestion(start, distanceKm, terrain, index)
   // Route a few candidate shapes, then compare them on one batched
   // elevation lookup so terrain preference can influence the choice.
   const candidates = [];
+  let failure = null;
   for (let i = 0; i < CANDIDATES_PER_SUGGESTION; i++) {
     const { rotation, shape } = shapeForSlot(index * CANDIDATES_PER_SUGGESTION + i);
-    const plan = await planCandidate(
-      generateLoopRoute(start, distanceKm, rotation, shape, POINTS_PER_ROUTE),
-      true
-    );
-    candidates.push({ ...plan, rotation, shape });
+    try {
+      const plan = await planCandidate(
+        generateLoopRoute(start, distanceKm, rotation, shape, POINTS_PER_ROUTE),
+        true
+      );
+      candidates.push({ ...plan, rotation, shape });
+    } catch (err) {
+      failure = err;
+    }
+  }
+  // One shape failing is survivable; none of them routing is not. Better to
+  // report that than to invent a route nobody can actually run.
+  if (candidates.length === 0) {
+    throw failure ?? new Error('Could not plan a route from here.');
   }
 
   const scored = await withStats(candidates);
