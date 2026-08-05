@@ -138,6 +138,17 @@ function App() {
     setFindError(null);
   };
 
+  // "New search" from the result view has to bring the input form back, not
+  // just rerun the same search - otherwise there is no way to change the
+  // distance/terrain/activity once a route is showing short of reloading.
+  // Distance/terrain/activity themselves are left as they were, so tweaking
+  // one and searching again doesn't mean re-entering everything.
+  const handleResetSearch = () => {
+    setSuggestions([]);
+    setCurrentIndex(-1);
+    setFindError(null);
+  };
+
   const handlePrevSuggestion = () => {
     setCurrentIndex((i) => Math.max(0, i - 1));
   };
@@ -237,6 +248,7 @@ function App() {
         <Sidebar
           mode={mode}
           onToggleSheet={handleToggleSheet}
+          sheetCollapsed={sheetCollapsed}
           drawnDistanceKm={drawnDistanceKm}
           drawnSegmentCount={drawnSegments.length}
           onClearDrawnRoute={handleClearDrawnRoute}
@@ -253,6 +265,7 @@ function App() {
           activityId={activityId}
           onActivityChange={handleActivityChange}
           onFindRoutes={handleFindRoutes}
+          onResetSearch={handleResetSearch}
           loading={loading}
           suggestions={suggestions}
           currentIndex={currentIndex}

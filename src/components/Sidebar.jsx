@@ -103,6 +103,7 @@ function FindModeControls({
   activityId,
   onActivityChange,
   onFindRoutes,
+  onResetSearch,
   loading,
   suggestions,
   currentIndex,
@@ -224,8 +225,8 @@ function FindModeControls({
             )}
           </div>
 
-          <button className="btn btn-secondary" onClick={onFindRoutes}>
-            Start a new search
+          <button className="btn btn-secondary" onClick={onResetSearch}>
+            New search
           </button>
         </div>
       )}
@@ -323,22 +324,28 @@ function SheetHandle({ onToggle }) {
   );
 }
 
-export default function Sidebar({ mode, onToggleSheet, ...props }) {
+export default function Sidebar({ mode, onToggleSheet, sheetCollapsed, ...props }) {
   return (
     <div className="sheet-content">
       <SheetHandle onToggle={onToggleSheet} />
-      {mode === 'draw' ? (
-        <DrawModeControls
-          drawnDistanceKm={props.drawnDistanceKm}
-          drawnSegmentCount={props.drawnSegmentCount}
-          onClear={props.onClearDrawnRoute}
-          onUndoSegment={props.onUndoSegment}
-          penActive={props.penActive}
-          onTogglePen={props.onTogglePen}
-        />
-      ) : (
-        <FindModeControls {...props} />
-      )}
+      {/* `inert` (not display:none) so the collapse animates as the sheet
+          visually clipping this out via its own shrinking overflow:hidden,
+          rather than the content vanishing instantly. Still keeps it out of
+          the tab order and off-limits to screen readers while hidden. */}
+      <div inert={sheetCollapsed || undefined}>
+        {mode === 'draw' ? (
+          <DrawModeControls
+            drawnDistanceKm={props.drawnDistanceKm}
+            drawnSegmentCount={props.drawnSegmentCount}
+            onClear={props.onClearDrawnRoute}
+            onUndoSegment={props.onUndoSegment}
+            penActive={props.penActive}
+            onTogglePen={props.onTogglePen}
+          />
+        ) : (
+          <FindModeControls {...props} />
+        )}
+      </div>
     </div>
   );
 }

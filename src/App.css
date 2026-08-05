@@ -130,12 +130,12 @@
   padding: 6px 20px calc(20px + env(safe-area-inset-bottom, 0px));
 }
 
-/* Collapsed: only the handle stays visible and tappable, everything else
-   in the sheet is hidden rather than just clipped so it can't be focused
-   or read by a screen reader while out of view. */
-.sheet-collapsed .sheet-content > *:not(.sheet-handle-row) {
-  display: none;
-}
+/* Collapsed: the shrinking .sheet clips everything below the handle out of
+   view (no display:none) so the collapse reads as the panel sliding down
+   behind itself over the 0.25s height transition, rather than the content
+   vanishing instantly while an empty box keeps shrinking around it.
+   Non-visual exclusion (focus, screen readers) is handled separately via
+   `inert` on the content itself, not through display. */
 
 .sheet-collapsed .sheet-handle-bar {
   width: 44px;
