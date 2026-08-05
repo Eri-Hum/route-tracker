@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import MapView from './components/MapView';
 import { generateRouteSuggestion } from './utils/routeSuggestions';
+import { getActivity, DEFAULT_ACTIVITY } from './utils/activities';
 import './App.css';
 
 const DEFAULT_DISTANCE_KM = 5;
@@ -21,6 +22,7 @@ function App() {
   const [geoError, setGeoError] = useState(null);
   const [distanceKm, setDistanceKm] = useState(DEFAULT_DISTANCE_KM);
   const [terrain, setTerrain] = useState('any');
+  const [activityId, setActivityId] = useState(DEFAULT_ACTIVITY);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
@@ -65,7 +67,13 @@ function App() {
     setLoading(true);
     setFindError(null);
     try {
-      const first = await generateRouteSuggestion(userPosition, Number(distanceKm), terrain, 0);
+      const first = await generateRouteSuggestion(
+        userPosition,
+        Number(distanceKm),
+        terrain,
+        0,
+        getActivity(activityId)
+      );
       setSuggestions([first]);
       setCurrentIndex(0);
     } catch (err) {
@@ -75,6 +83,16 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Suggestions are tied to the profile that produced them - a walking loop
+  // is not a bike route - so switching activity clears them rather than
+  // leaving stale ones on the map.
+  const handleActivityChange = (id) => {
+    setActivityId(id);
+    setSuggestions([]);
+    setCurrentIndex(-1);
+    setFindError(null);
   };
 
   const handlePrevSuggestion = () => {
@@ -95,7 +113,8 @@ function App() {
         userPosition,
         Number(distanceKm),
         terrain,
-        suggestions.length
+        suggestions.length,
+        getActivity(activityId)
       );
       setSuggestions((prev) => [...prev, next]);
       setCurrentIndex(suggestions.length);
@@ -122,6 +141,8 @@ function App() {
         setDistanceKm={setDistanceKm}
         terrain={terrain}
         setTerrain={setTerrain}
+        activityId={activityId}
+        onActivityChange={handleActivityChange}
         onFindRoutes={handleFindRoutes}
         loading={loading}
         suggestions={suggestions}

@@ -1,3 +1,5 @@
+import { ACTIVITIES } from '../utils/activities';
+
 function formatMinutes(mins) {
   const h = Math.floor(mins / 60);
   const m = Math.round(mins % 60);
@@ -41,6 +43,8 @@ function FindModeControls({
   setDistanceKm,
   terrain,
   setTerrain,
+  activityId,
+  onActivityChange,
   onFindRoutes,
   loading,
   suggestions,
@@ -65,6 +69,23 @@ function FindModeControls({
           Location: {userPosition[0].toFixed(4)}, {userPosition[1].toFixed(4)}
         </p>
       )}
+
+      <span className="field-label">Activity</span>
+      <div className="segmented" role="group" aria-label="Activity">
+        {Object.values(ACTIVITIES).map((activity) => (
+          <button
+            key={activity.id}
+            type="button"
+            className={`segmented-option ${
+              activityId === activity.id ? 'segmented-option--active' : ''
+            }`}
+            aria-pressed={activityId === activity.id}
+            onClick={() => onActivityChange(activity.id)}
+          >
+            {activity.label}
+          </button>
+        ))}
+      </div>
 
       <label className="field-label" htmlFor="distance-input">
         Desired distance (km)
@@ -102,7 +123,7 @@ function FindModeControls({
       {loading && (
         <div className="loading-indicator">
           <span className="spinner" />
-          {route ? 'Finding another route…' : 'Fetching route data…'}
+          {route ? 'Finding another route…' : 'Matching your distance…'}
         </div>
       )}
 
@@ -135,6 +156,11 @@ function FindModeControls({
               <span>Est. time</span>
               <strong>{formatMinutes(route.estimatedMinutes)}</strong>
             </div>
+            {route.offTarget && (
+              <p className="hint">
+                Closest loop the streets around here allow — try Next for another.
+              </p>
+            )}
           </div>
         </div>
       )}
