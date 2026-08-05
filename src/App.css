@@ -133,26 +133,37 @@
 /* Collapsed: only the handle stays visible and tappable, everything else
    in the sheet is hidden rather than just clipped so it can't be focused
    or read by a screen reader while out of view. */
-.sheet-collapsed .sheet {
-  cursor: pointer;
-}
-
-.sheet-collapsed .sheet-content > *:not(.sheet-handle) {
+.sheet-collapsed .sheet-content > *:not(.sheet-handle-row) {
   display: none;
 }
 
-.sheet-collapsed .sheet-handle {
+.sheet-collapsed .sheet-handle-bar {
   width: 44px;
   background: var(--ink-faint);
 }
 
-.sheet-handle {
+/* The one dedicated control for the sheet itself - tap to toggle, drag to
+   pull it open or push it shut. A generous full-width, padded hit target
+   around a slim visual bar, rather than making the bar itself the target. */
+.sheet-handle-row {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 10px 0;
+  margin: 0 0 4px;
+  flex-shrink: 0;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.sheet-handle-bar {
   width: 36px;
   height: 4px;
   border-radius: 2px;
   background: var(--border);
-  margin: 6px auto 10px;
-  flex-shrink: 0;
+  pointer-events: none;
 }
 
 .sheet-section {
