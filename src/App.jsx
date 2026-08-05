@@ -77,7 +77,16 @@ function App() {
   // for. A programmatic move (recentring on a fresh location fix) does not
   // fire Leaflet's drag events, so this only reacts to an actual touch/drag.
   const handleMapDragStart = useCallback(() => setSheetCollapsed(true), []);
-  const handleExpandSheet = () => setSheetCollapsed(false);
+
+  // The handle is the one deliberate control for the sheet itself: a tap
+  // toggles whichever state it's in, a real drag is directional (pull down
+  // to collapse, up to expand) - as opposed to it collapsing on its own
+  // while drawing or panning.
+  const handleToggleSheet = (action) => {
+    if (action === 'collapse') setSheetCollapsed(true);
+    else if (action === 'expand') setSheetCollapsed(false);
+    else setSheetCollapsed((c) => !c);
+  };
 
   const handleLocate = () => {
     setGeoError(null);
@@ -224,20 +233,10 @@ function App() {
 
       {findError && <div className="toast toast-error">{findError}</div>}
 
-      <div
-        className="sheet"
-        onClick={sheetCollapsed ? handleExpandSheet : undefined}
-        role={sheetCollapsed ? 'button' : undefined}
-        tabIndex={sheetCollapsed ? 0 : undefined}
-        aria-label={sheetCollapsed ? 'Show controls' : undefined}
-        onKeyDown={
-          sheetCollapsed
-            ? (e) => (e.key === 'Enter' || e.key === ' ') && handleExpandSheet()
-            : undefined
-        }
-      >
+      <div className="sheet">
         <Sidebar
           mode={mode}
+          onToggleSheet={handleToggleSheet}
           drawnDistanceKm={drawnDistanceKm}
           drawnSegmentCount={drawnSegments.length}
           onClearDrawnRoute={handleClearDrawnRoute}

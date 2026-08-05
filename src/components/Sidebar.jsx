@@ -1,4 +1,10 @@
+import { useRef } from 'react';
 import { ACTIVITIES } from '../utils/activities';
+
+// Past this much vertical movement, a press on the handle counts as a drag
+// (collapse by pulling down, expand by pulling up) rather than a tap
+// (toggle whichever state it's currently in).
+const HANDLE_DRAG_THRESHOLD = 30;
 
 const TERRAIN_OPTIONS = [
   { id: 'any', label: "Doesn't matter" },
@@ -258,10 +264,69 @@ function ChevronIcon({ direction }) {
   );
 }
 
-export default function Sidebar({ mode, ...props }) {
+// The handle is the one deliberate, dedicated control for showing or hiding
+// the sheet - as opposed to it collapsing on its own while drawing or
+// panning. A tap toggles whichever state it's in; a real drag is
+// directional, like pulling a real bottom sheet open or push it shut.
+//
+// Pointer events (not a plain onClick) track the drag so mouse and touch
+// share one code path. Click still fires afterwards - for the mouse/touch
+// tap case *and* for keyboard activation, which never dispatches pointer
+// events at all - so the actual state change happens there, once, reading
+// whatever the pointer handlers most recently measured.
+function SheetHandle({ onToggle }) {
+  const startYRef = useRef(null);
+  const dragDeltaRef = useRef(0);
+
+  const handlePointerDown = (e) => {
+    startYRef.current = e.clientY;
+    dragDeltaRef.current = 0;
+    // Without this, a drag that moves the pointer past the handle's small
+    // hit area stops delivering pointermove (and the eventual pointerup)
+    // to it - they'd go to whatever element is now under the pointer
+    // instead. Capturing keeps them targeted here regardless of where the
+    // pointer physically ends up.
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const handlePointerMove = (e) => {
+    if (startYRef.current !== null) {
+      dragDeltaRef.current = e.clientY - startYRef.current;
+    }
+  };
+  const handlePointerUp = (e) => {
+    startYRef.current = null;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+  };
+  const handleClick = () => {
+    const delta = dragDeltaRef.current;
+    dragDeltaRef.current = 0;
+    if (Math.abs(delta) > HANDLE_DRAG_THRESHOLD) {
+      onToggle(delta > 0 ? 'collapse' : 'expand');
+    } else {
+      onToggle('toggle');
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className="sheet-handle-row"
+      aria-label="Show or hide panel"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onClick={handleClick}
+    >
+      <span className="sheet-handle-bar" aria-hidden="true" />
+    </button>
+  );
+}
+
+export default function Sidebar({ mode, onToggleSheet, ...props }) {
   return (
     <div className="sheet-content">
-      <div className="sheet-handle" aria-hidden="true" />
+      <SheetHandle onToggle={onToggleSheet} />
       {mode === 'draw' ? (
         <DrawModeControls
           drawnDistanceKm={props.drawnDistanceKm}
