@@ -100,7 +100,7 @@ export default function MapView({
         <>
           <RecenterOnPosition position={userPosition} />
           <Marker position={userPosition}>
-            <Popup>You are here</Popup>
+            <Popup>Du är här</Popup>
           </Marker>
         </>
       )}

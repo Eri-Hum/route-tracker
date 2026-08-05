@@ -153,15 +153,15 @@ function App() {
   const handleLocate = () => {
     setGeoError(null);
     if (!navigator.geolocation) {
-      setGeoError('Geolocation is not supported by this browser.');
+      setGeoError('Geolokalisering stöds inte av den här webbläsaren.');
       return;
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setUserPosition([pos.coords.latitude, pos.coords.longitude]);
       },
-      (err) => {
-        setGeoError(err.message || 'Unable to retrieve your location.');
+      () => {
+        setGeoError('Kunde inte hämta din position.');
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -181,8 +181,8 @@ function App() {
       );
       setSuggestions([first]);
       setCurrentIndex(0);
-    } catch (err) {
-      setFindError(err.message || 'Failed to fetch route data.');
+    } catch {
+      setFindError('Det gick inte att hämta ruttdata.');
       setSuggestions([]);
       setCurrentIndex(-1);
     } finally {
@@ -234,8 +234,8 @@ function App() {
       );
       setSuggestions((prev) => [...prev, next]);
       setCurrentIndex(suggestions.length);
-    } catch (err) {
-      setFindError(err.message || 'Failed to fetch route data.');
+    } catch {
+      setFindError('Det gick inte att hämta ruttdata.');
     } finally {
       setLoading(false);
     }
@@ -255,19 +255,19 @@ function App() {
       />
 
       <header className="topbar">
-        <span className="brand">Route Tracker</span>
-        <div className="segmented segmented--topbar" role="group" aria-label="Mode">
+        <span className="brand">Ruttspårare</span>
+        <div className="segmented segmented--topbar" role="group" aria-label="Läge">
           <button
             className={`segmented-option ${mode === 'draw' ? 'segmented-option--active' : ''}`}
             onClick={() => mode !== 'draw' && handleToggleMode()}
           >
-            Draw
+            Rita
           </button>
           <button
             className={`segmented-option ${mode === 'find' ? 'segmented-option--active' : ''}`}
             onClick={() => mode !== 'find' && handleToggleMode()}
           >
-            Find
+            Hitta
           </button>
         </div>
       </header>
@@ -276,8 +276,8 @@ function App() {
         <button
           className={`fab fab--pencil ${penActive ? 'fab--active' : ''}`}
           onClick={handleTogglePen}
-          aria-label={penActive ? 'Stop drawing' : 'Start drawing'}
-          title={penActive ? 'Stop drawing' : 'Start drawing'}
+          aria-label={penActive ? 'Sluta rita' : 'Börja rita'}
+          title={penActive ? 'Sluta rita' : 'Börja rita'}
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 20h9" strokeLinecap="round" />
@@ -294,8 +294,8 @@ function App() {
         <button
           className="fab fab--locate"
           onClick={handleLocate}
-          aria-label={userPosition ? 'Update my location' : 'Use my location'}
-          title={userPosition ? 'Update my location' : 'Use my location'}
+          aria-label={userPosition ? 'Uppdatera min position' : 'Använd min position'}
+          title={userPosition ? 'Uppdatera min position' : 'Använd min position'}
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="3" />
