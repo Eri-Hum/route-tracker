@@ -72,7 +72,7 @@ export default function DrawCanvas({ active, resumeFrom, onRouteComplete }) {
     pixelPointsRef.current.push(p);
 
     const ctx = getCtx();
-    ctx.strokeStyle = '#e6402b';
+    ctx.strokeStyle = '#f97316';
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';

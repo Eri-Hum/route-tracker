@@ -46,10 +46,21 @@ export default function MapView({
       center={userPosition || DEFAULT_CENTER}
       zoom={13}
       className="map-container"
+      // No corner is free of floating chrome on mobile: the topbar spans
+      // the full top edge and the sheet the full bottom one. Rather than
+      // plant +/- buttons on top of either, this leans on pinch/scroll zoom
+      // (a locate button covers the one thing zoom buttons are also used
+      // for as a proxy - getting back to where you are).
+      zoomControl={false}
     >
+      {/* CartoDB's light "Voyager" basemap - clean labels and muted colour,
+          closer to a modern property-listing map than raw OSM tiles. Free,
+          no API key, built on OpenStreetMap data. */}
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+        subdomains="abcd"
+        maxZoom={20}
       />
 
       <DrawCanvas
@@ -59,15 +70,18 @@ export default function MapView({
       />
 
       {mode === 'draw' && drawnPoints.length > 1 && (
-        <Polyline positions={drawnPoints} pathOptions={{ color: '#e6402b', weight: 4 }} />
+        <Polyline
+          positions={drawnPoints}
+          pathOptions={{ color: '#f97316', weight: 5, lineCap: 'round', lineJoin: 'round' }}
+        />
       )}
 
       {/* Where the next stroke picks up, so it is clear where to carry on. */}
       {mode === 'draw' && resumeFrom && (
         <CircleMarker
           center={resumeFrom}
-          radius={6}
-          pathOptions={{ color: '#fff', weight: 2, fillColor: '#e6402b', fillOpacity: 1 }}
+          radius={7}
+          pathOptions={{ color: '#fff', weight: 3, fillColor: '#f97316', fillOpacity: 1 }}
         />
       )}
 
@@ -83,7 +97,13 @@ export default function MapView({
       {mode === 'find' && route && (
         <Polyline
           positions={route.points}
-          pathOptions={{ color: '#2b7de6', weight: 5, opacity: 0.9 }}
+          pathOptions={{
+            color: '#2563eb',
+            weight: 5,
+            opacity: 0.95,
+            lineCap: 'round',
+            lineJoin: 'round',
+          }}
         />
       )}
     </MapContainer>

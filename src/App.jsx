@@ -136,58 +136,95 @@ function App() {
 
   return (
     <div className="app">
-      <Sidebar
+      <MapView
         mode={mode}
-        onToggleMode={handleToggleMode}
-        drawnDistanceKm={drawnDistanceKm}
-        drawnSegmentCount={drawnSegments.length}
-        onClearDrawnRoute={handleClearDrawnRoute}
-        onUndoSegment={handleUndoSegment}
-        penActive={penActive}
-        onTogglePen={handleTogglePen}
+        drawingActive={penActive}
+        onRouteComplete={handleRouteComplete}
+        drawnPoints={drawnPoints}
+        resumeFrom={resumeFrom}
         userPosition={userPosition}
-        geoError={geoError}
-        onLocate={handleLocate}
-        distanceKm={distanceKm}
-        setDistanceKm={setDistanceKm}
-        terrain={terrain}
-        setTerrain={setTerrain}
-        activityId={activityId}
-        onActivityChange={handleActivityChange}
-        onFindRoutes={handleFindRoutes}
-        loading={loading}
-        suggestions={suggestions}
-        currentIndex={currentIndex}
-        onPrevSuggestion={handlePrevSuggestion}
-        onNextSuggestion={handleNextSuggestion}
-        maxSuggestions={MAX_SUGGESTIONS}
+        route={currentIndex >= 0 ? suggestions[currentIndex] : null}
       />
 
-      <main className="map-area">
-        <MapView
-          mode={mode}
-          drawingActive={penActive}
-          onRouteComplete={handleRouteComplete}
-          drawnPoints={drawnPoints}
-          resumeFrom={resumeFrom}
-          userPosition={userPosition}
-          route={currentIndex >= 0 ? suggestions[currentIndex] : null}
-        />
-        {mode === 'draw' && (
+      <header className="topbar">
+        <span className="brand">Route Tracker</span>
+        <div className="segmented segmented--topbar" role="group" aria-label="Mode">
           <button
-            className={`pen-toggle-btn ${penActive ? 'pen-toggle-btn--active' : ''}`}
-            onClick={handleTogglePen}
-            aria-label={penActive ? 'Stop drawing' : 'Start drawing'}
-            title={penActive ? 'Stop drawing' : 'Start drawing'}
+            className={`segmented-option ${mode === 'draw' ? 'segmented-option--active' : ''}`}
+            onClick={() => mode !== 'draw' && handleToggleMode()}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 20h9" strokeLinecap="round" />
-              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            Draw
           </button>
-        )}
-        {findError && <div className="toast toast-error">{findError}</div>}
-      </main>
+          <button
+            className={`segmented-option ${mode === 'find' ? 'segmented-option--active' : ''}`}
+            onClick={() => mode !== 'find' && handleToggleMode()}
+          >
+            Find
+          </button>
+        </div>
+      </header>
+
+      {mode === 'draw' && (
+        <button
+          className={`fab fab--pencil ${penActive ? 'fab--active' : ''}`}
+          onClick={handleTogglePen}
+          aria-label={penActive ? 'Stop drawing' : 'Start drawing'}
+          title={penActive ? 'Stop drawing' : 'Start drawing'}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 20h9" strokeLinecap="round" />
+            <path
+              d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
+
+      {mode === 'find' && (
+        <button
+          className="fab fab--locate"
+          onClick={handleLocate}
+          aria-label={userPosition ? 'Update my location' : 'Use my location'}
+          title={userPosition ? 'Update my location' : 'Use my location'}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
+
+      {findError && <div className="toast toast-error">{findError}</div>}
+
+      <div className="sheet">
+        <Sidebar
+          mode={mode}
+          drawnDistanceKm={drawnDistanceKm}
+          drawnSegmentCount={drawnSegments.length}
+          onClearDrawnRoute={handleClearDrawnRoute}
+          onUndoSegment={handleUndoSegment}
+          penActive={penActive}
+          onTogglePen={handleTogglePen}
+          userPosition={userPosition}
+          geoError={geoError}
+          onLocate={handleLocate}
+          distanceKm={distanceKm}
+          setDistanceKm={setDistanceKm}
+          terrain={terrain}
+          setTerrain={setTerrain}
+          activityId={activityId}
+          onActivityChange={handleActivityChange}
+          onFindRoutes={handleFindRoutes}
+          loading={loading}
+          suggestions={suggestions}
+          currentIndex={currentIndex}
+          onPrevSuggestion={handlePrevSuggestion}
+          onNextSuggestion={handleNextSuggestion}
+          maxSuggestions={MAX_SUGGESTIONS}
+        />
+      </div>
     </div>
   );
 }
