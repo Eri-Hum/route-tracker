@@ -128,6 +128,14 @@
   flex-direction: column;
   gap: 4px;
   padding: 6px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  /* The panel's own content never actually runs taller than the sheet in
+     practice, so there's nothing worth scrolling day to day - and letting
+     touch-scroll compete with the whole-panel drag-to-collapse gesture
+     below is exactly what let touches under the collapsed bar silently
+     scroll the (invisible) content instead of expanding it. overflow-y
+     stays auto for the rare edge case (very large text/zoom) and for
+     mouse-wheel/keyboard scrolling, neither of which fight the gesture. */
+  touch-action: none;
 }
 
 /* Collapsed: the shrinking .sheet clips everything below the handle out of
@@ -135,7 +143,12 @@
    behind itself over the 0.25s height transition, rather than the content
    vanishing instantly while an empty box keeps shrinking around it.
    Non-visual exclusion (focus, screen readers) is handled separately via
-   `inert` on the content itself, not through display. */
+   `inert` on the content itself, not through display. overflow is also
+   turned off outright, closing the wheel/keyboard-scroll route still open
+   with touch-action alone. */
+.sheet-collapsed .sheet-content {
+  overflow: hidden;
+}
 
 .sheet-collapsed .sheet-handle-bar {
   width: 44px;

@@ -5,6 +5,12 @@ import { ACTIVITIES } from '../utils/activities';
 // (collapse by pulling down, expand by pulling up) rather than a tap
 // (toggle whichever state it's currently in).
 const HANDLE_DRAG_THRESHOLD = 30;
+// A bit higher for a drag starting anywhere on the panel, so brushing past
+// a label or a card on the way to tapping something doesn't collapse it.
+const PANEL_DRAG_THRESHOLD = 40;
+// Buttons, inputs, and the like should behave normally when pressed - a
+// panel-wide drag-to-collapse must not swallow their taps or block typing.
+const INTERACTIVE_SELECTOR = 'button, input, select, textarea, a, [role="button"]';
 
 const TERRAIN_OPTIONS = [
   { id: 'any', label: "Doesn't matter" },
@@ -296,6 +302,9 @@ function SheetHandle({ onToggle }) {
   };
 
   const handlePointerDown = (e) => {
+    // The whole panel now also recognises a drag; stop it reaching that
+    // listener so the same press isn't measured and acted on twice.
+    e.stopPropagation();
     startYRef.current = e.clientY;
     dragDeltaRef.current = 0;
     // Without this, a drag that moves the pointer past the handle's small
@@ -306,11 +315,13 @@ function SheetHandle({ onToggle }) {
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
   const handlePointerMove = (e) => {
+    e.stopPropagation();
     if (startYRef.current !== null) {
       dragDeltaRef.current = e.clientY - startYRef.current;
     }
   };
   const handlePointerUp = (e) => {
+    e.stopPropagation();
     startYRef.current = null;
     e.currentTarget.releasePointerCapture?.(e.pointerId);
     const delta = dragDeltaRef.current;
@@ -346,9 +357,56 @@ function SheetHandle({ onToggle }) {
   );
 }
 
+// Lets a drag started anywhere on the panel collapse or expand it, not just
+// on the handle - while leaving ordinary controls (buttons, the distance
+// input, the segmented options) to work exactly as normal. A drag is
+// required, not a tap: tapping blank space (a label, a card background)
+// doing nothing is the expected, unsurprising behaviour; only the handle
+// itself treats a plain tap as a toggle.
+function usePanelDrag(onToggle) {
+  const startYRef = useRef(null);
+  const draggingRef = useRef(false);
+
+  const handlePointerDown = (e) => {
+    // Bail out entirely for interactive controls - not just skip capturing -
+    // so their own clicks, focus, and typing are completely undisturbed.
+    if (e.target.closest(INTERACTIVE_SELECTOR)) {
+      startYRef.current = null;
+      return;
+    }
+    startYRef.current = e.clientY;
+    draggingRef.current = false;
+    // Captured immediately (not once a drag is confirmed): the target here
+    // is never an interactive control, so there's nothing else this could
+    // take an event away from, and waiting risks losing pointermove if the
+    // finger moves quickly past this element's own bounds.
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const handlePointerMove = (e) => {
+    if (startYRef.current === null) return;
+    const delta = e.clientY - startYRef.current;
+    if (!draggingRef.current && Math.abs(delta) > PANEL_DRAG_THRESHOLD) {
+      draggingRef.current = true;
+      onToggle(delta > 0 ? 'collapse' : 'expand');
+    }
+  };
+  const stopTracking = () => {
+    startYRef.current = null;
+    draggingRef.current = false;
+  };
+
+  return {
+    onPointerDown: handlePointerDown,
+    onPointerMove: handlePointerMove,
+    onPointerUp: stopTracking,
+    onPointerCancel: stopTracking,
+  };
+}
+
 export default function Sidebar({ mode, onToggleSheet, sheetCollapsed, ...props }) {
+  const panelDrag = usePanelDrag(onToggleSheet);
   return (
-    <div className="sheet-content">
+    <div className="sheet-content" {...panelDrag}>
       <SheetHandle onToggle={onToggleSheet} />
       {/* `inert` (not display:none) so the collapse animates as the sheet
           visually clipping this out via its own shrinking overflow:hidden,
