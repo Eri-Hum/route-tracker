@@ -1,11 +1,15 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useMap } from 'react-leaflet';
-import { pathDistance } from '../utils/haversine';
 
 // Freehand drawing overlay for "Draw Route" mode. A canvas sits on top of the
 // Leaflet map and captures pointer movement while the mouse/finger is held
 // down, mirroring the map-panning gestures being temporarily disabled.
-export default function DrawCanvas({ active, onRouteComplete }) {
+//
+// Each press-drag-release produces one stroke. `resumeFrom` is the end of the
+// route so far, if any, so a stroke can carry on from where the last one
+// stopped - letting a route be drawn in stages with panning and zooming in
+// between.
+export default function DrawCanvas({ active, resumeFrom, onRouteComplete }) {
   const map = useMap();
   const canvasRef = useRef(null);
   const drawingRef = useRef(false);
@@ -66,13 +70,24 @@ export default function DrawCanvas({ active, onRouteComplete }) {
     clearCanvas();
     const p = getPoint(e);
     pixelPointsRef.current.push(p);
+
     const ctx = getCtx();
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
     ctx.strokeStyle = '#e6402b';
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.beginPath();
+
+    // When continuing an existing route, draw from where it left off so the
+    // join is visible while drawing rather than only appearing on release.
+    if (resumeFrom) {
+      const anchor = map.latLngToContainerPoint(resumeFrom);
+      ctx.moveTo(anchor.x, anchor.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    } else {
+      ctx.moveTo(p.x, p.y);
+    }
   };
 
   const handleMove = (e) => {
@@ -101,8 +116,8 @@ export default function DrawCanvas({ active, onRouteComplete }) {
       return [lat, lng];
     });
 
-    const distanceKm = pathDistance(latlngs);
-    onRouteComplete(latlngs, distanceKm);
+    // Hand over just this stroke; the caller owns the route it belongs to.
+    onRouteComplete(latlngs);
     clearCanvas();
   };
 
