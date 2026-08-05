@@ -1,11 +1,9 @@
-import { generateLoopRoute, resamplePath, overlapRatio } from './geo';
+import { generateLoopRoute, resamplePath, overlapRatio, excessTurnPerKm } from './geo';
 import { fetchElevations, elevationGain } from './elevation';
 import { planRoadLoop } from './routing';
 
-// Waypoints per candidate loop. Each one is a hard constraint the router
-// must pass through, so a handful of well-spread points beats a dense ring:
-// it leaves each leg free to be a natural shortest path.
-const POINTS_PER_ROUTE = 5;
+// How many waypoints a loop uses, and how much its shape wanders, come from
+// the activity - a bike wants fewer, straighter legs than a run.
 const MIN_WAYPOINTS = 3;
 // A waypoint that had to be snapped further than this to reach the network
 // landed somewhere unroutable (inside a block, across a railway, in water).
@@ -23,9 +21,11 @@ const SHAPE_VARIANTS = [0, 0.5, -0.5];
 // How close the routed distance has to get to what was asked for.
 const DISTANCE_TOLERANCE_KM = 0.2;
 // Routing calls are throttled to 1/sec, so each extra step costs about a
-// second of waiting. The search below normally lands inside tolerance
-// within two, and exits as soon as it does.
-const MAX_REFINEMENT_STEPS = 5;
+// second of waiting. The search exits the moment it is inside tolerance and
+// usually needs a step or two, so this ceiling is only ever reached by the
+// awkward cases - typically long rides, where a fixed 200 m is a very tight
+// fraction of the total.
+const MAX_REFINEMENT_STEPS = 9;
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 3;
 // When the search runs out of room between its own measurements, rotating
@@ -38,21 +38,21 @@ const SHAPE_NUDGE_DEG = 25;
 // dominates the score; distance accuracy and terrain fit are tie-breakers.
 const OVERLAP_WEIGHT = 3;
 const TERRAIN_WEIGHT = 0.5;
+// Turning this much past a loop's unavoidable 360 degrees, per km, counts as
+// a thoroughly wiggly route. Used to bring excess turning onto the same
+// 0-1ish scale as the other scoring terms.
+const WIGGLY_TURN_PER_KM = 200;
 
-// Baseline running pace (min/km) plus Naismith-style penalty for ascent.
-const BASE_PACE_MIN_PER_KM = 6;
-const MIN_PER_M_ASCENT = 0.1;
-
-function estimateMinutes(distanceKm, gainM) {
-  return distanceKm * BASE_PACE_MIN_PER_KM + gainM * MIN_PER_M_ASCENT;
+function estimateMinutes(distanceKm, gainM, activity) {
+  return distanceKm * activity.paceMinPerKm + gainM * activity.ascentMinPerM;
 }
 
 function gainPerKm(gainM, distanceKm) {
   return distanceKm > 0 ? gainM / distanceKm : 0;
 }
 
-function classify(gainM, distanceKm) {
-  return gainPerKm(gainM, distanceKm) < 8 ? 'flat' : 'hilly';
+function classify(gainM, distanceKm, activity) {
+  return gainPerKm(gainM, distanceKm) < activity.hillyGainPerKm ? 'flat' : 'hilly';
 }
 
 // Waypoints the router could only reach by leaving the network are the ones
@@ -81,14 +81,14 @@ function pruneUnroutableWaypoints(waypoints, snapDistances) {
 // waypoints - a "route" cutting across motorways, railways and water, shown
 // with a distance and a climb as though someone could run it. A failure
 // here has to surface as a failure.
-async function planCandidate(waypoints, allowPrune) {
-  const plan = await planRoadLoop(waypoints);
+async function planCandidate(waypoints, activity, allowPrune) {
+  const plan = await planRoadLoop(waypoints, activity);
   if (!allowPrune) return plan;
 
   const pruned = pruneUnroutableWaypoints(waypoints, plan.snapDistances);
   if (!pruned) return plan;
   try {
-    return await planRoadLoop(pruned);
+    return await planRoadLoop(pruned, activity);
   } catch {
     return plan;
   }
@@ -101,8 +101,23 @@ function shapeForSlot(slot) {
   };
 }
 
-function scoreOf(route, targetKm, terrain) {
+// Waypoints for a loop meant to come out at `targetKm` once routed, at
+// `scale` times that size. The ring is laid out smaller than the target by
+// the activity's typical detour, so scale 1 is already a fair guess rather
+// than a guaranteed overshoot.
+function skeletonFor(start, targetKm, scale, rotation, shape, activity) {
+  return generateLoopRoute(
+    start,
+    (targetKm * scale) / activity.typicalDetour,
+    rotation,
+    shape * activity.wobbleAmplitude,
+    activity.waypoints
+  );
+}
+
+function scoreOf(route, targetKm, terrain, activity) {
   const distanceError = Math.abs(route.distanceKm - targetKm) / targetKm;
+
   let terrainPenalty = 0;
   if (terrain !== 'any') {
     const steepness = gainPerKm(route.elevationGainM, route.distanceKm);
@@ -110,8 +125,22 @@ function scoreOf(route, targetKm, terrain) {
     const normalized = Math.min(steepness / 20, 1);
     terrainPenalty = terrain === 'flat' ? normalized : 1 - normalized;
   }
+
+  // Constant direction changes make for a tiring ride and a scrappy run.
+  const turnPenalty = Math.min(route.excessTurn / WIGGLY_TURN_PER_KM, 1);
+
+  // The profile's own travel time gives away ground it considers slow
+  // going: on a bike that is footways and steps, where the rider is pushing
+  // rather than riding.
+  const speedKph = route.durationH > 0 ? route.distanceKm / route.durationH : Infinity;
+  const pushPenalty = Math.max(0, 1 - speedKph / activity.cruisingSpeedKph);
+
   return (
-    route.overlap * OVERLAP_WEIGHT + distanceError + terrainPenalty * TERRAIN_WEIGHT
+    route.overlap * OVERLAP_WEIGHT +
+    distanceError +
+    terrainPenalty * TERRAIN_WEIGHT +
+    turnPenalty * activity.straightnessWeight +
+    pushPenalty * activity.pushingWeight
   );
 }
 
@@ -166,7 +195,7 @@ function nextScale(samples, target) {
 
 // Keep adjusting the loop's radius until its routed distance lands within
 // tolerance of what was asked for, returning the closest attempt.
-async function tuneDistance(start, target, winner) {
+async function tuneDistance(start, target, winner, activity) {
   const { shape } = winner;
   let rotation = winner.rotation;
   let samples = [{ scale: 1, distanceKm: winner.distanceKm }];
@@ -190,7 +219,8 @@ async function tuneDistance(start, target, winner) {
     let plan;
     try {
       plan = await planCandidate(
-        generateLoopRoute(start, target * scale, rotation, shape, POINTS_PER_ROUTE),
+        skeletonFor(start, target, scale, rotation, shape, activity),
+        activity,
         false
       );
     } catch {
@@ -223,7 +253,7 @@ async function tuneDistance(start, target, winner) {
 
 // Attach geometry- and elevation-derived stats to routes, using a single
 // batched elevation request for all of them.
-async function withStats(routes) {
+async function withStats(routes, activity) {
   const samples = routes.map((r) => resamplePath(r.points, ELEVATION_SAMPLE_POINTS));
   const flat = await fetchElevations(samples.flat());
 
@@ -233,9 +263,10 @@ async function withStats(routes) {
     return {
       ...route,
       overlap: overlapRatio(route.points),
+      excessTurn: excessTurnPerKm(route.points),
       elevationGainM: gainM,
-      estimatedMinutes: estimateMinutes(route.distanceKm, gainM),
-      terrain: classify(gainM, route.distanceKm),
+      estimatedMinutes: estimateMinutes(route.distanceKm, gainM, activity),
+      terrain: classify(gainM, route.distanceKm, activity),
     };
   });
 }
@@ -244,7 +275,7 @@ async function withStats(routes) {
 // gets its own rotations via the golden angle, so repeated calls with
 // increasing indexes produce an effectively unlimited stream of varied
 // routes rather than cycling a fixed pool.
-export async function generateRouteSuggestion(start, distanceKm, terrain, index) {
+export async function generateRouteSuggestion(start, distanceKm, terrain, index, activity) {
   // Route a few candidate shapes, then compare them on one batched
   // elevation lookup so terrain preference can influence the choice.
   const candidates = [];
@@ -253,7 +284,8 @@ export async function generateRouteSuggestion(start, distanceKm, terrain, index)
     const { rotation, shape } = shapeForSlot(index * CANDIDATES_PER_SUGGESTION + i);
     try {
       const plan = await planCandidate(
-        generateLoopRoute(start, distanceKm, rotation, shape, POINTS_PER_ROUTE),
+        skeletonFor(start, distanceKm, 1, rotation, shape, activity),
+        activity,
         true
       );
       candidates.push({ ...plan, rotation, shape });
@@ -262,19 +294,19 @@ export async function generateRouteSuggestion(start, distanceKm, terrain, index)
     }
   }
   // One shape failing is survivable; none of them routing is not. Better to
-  // report that than to invent a route nobody can actually run.
+  // report that than to invent a route nobody can actually travel.
   if (candidates.length === 0) {
     throw failure ?? new Error('Could not plan a route from here.');
   }
 
-  const scored = await withStats(candidates);
+  const scored = await withStats(candidates, activity);
   const winner = scored.reduce((a, b) =>
-    scoreOf(a, distanceKm, terrain) <= scoreOf(b, distanceKm, terrain) ? a : b
+    scoreOf(a, distanceKm, terrain, activity) <= scoreOf(b, distanceKm, terrain, activity) ? a : b
   );
 
   // Then home in on the requested distance with that shape.
-  const tuned = await tuneDistance(start, distanceKm, winner);
-  const final = tuned === winner ? winner : (await withStats([tuned]))[0];
+  const tuned = await tuneDistance(start, distanceKm, winner, activity);
+  const final = tuned === winner ? winner : (await withStats([tuned], activity))[0];
 
   return {
     id: `route-${index}`,

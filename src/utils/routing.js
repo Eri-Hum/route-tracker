@@ -2,14 +2,13 @@
 // OpenStreetMap Germany - no API key required.
 // https://routing.openstreetmap.de/about.html
 //
-// The "foot" profile is what keeps suggestions legal and safe to run: its
-// routable highway list covers primary through residential, service, track,
-// path, steps, pedestrian, footway and pier, and pointedly does *not*
-// include motorway, motorway_link, trunk or trunk_link. It also honours
+// The routing profile is what keeps suggestions legal and safe to travel.
+// Neither the foot nor the bicycle profile lists motorway, motorway_link,
+// trunk or trunk_link among its routable highway types, and both honour
 // access restrictions, refusing ways tagged no/private/agricultural/
-// forestry/delivery and foot=use_sidepath. Switching this endpoint to
-// another profile (routed-car, say) would silently start routing people
-// onto motorways, so it must not be changed casually.
+// forestry/delivery and use_sidepath. Pointing any of this at a driving
+// profile (routed-car) would silently start routing people onto motorways,
+// so the activity's service path must not be changed casually.
 //
 // The central problem when generating a loop this way is that every
 // waypoint handed to the router is a *hard constraint*: the route must
@@ -24,7 +23,7 @@
 //      reach the network (`waypoints[].distance`), which lets the caller
 //      identify and discard waypoints that landed somewhere unroutable.
 
-const OSRM_ROUTE_URL = 'https://routing.openstreetmap.de/routed-foot/route/v1/foot';
+const OSRM_HOST = 'https://routing.openstreetmap.de';
 const CORS_PROXY_URL = 'https://corsproxy.io/?url=';
 
 // The public instance asks for at most one request per second.
@@ -49,13 +48,14 @@ async function requestJson(url) {
 }
 
 // `points` is an ordered loop of [lat, lng] waypoints, starting and ending
-// at the same location. Returns the road-following geometry as [lat, lng]
-// pairs, the real route distance in km, and how far each waypoint had to be
-// snapped onto the network (metres).
-export async function planRoadLoop(points) {
+// at the same location, and `activity` selects the routing profile. Returns
+// the road-following geometry as [lat, lng] pairs, the real route distance
+// in km, the profile's own travel time in hours, and how far each waypoint
+// had to be snapped onto the network (metres).
+export async function planRoadLoop(points, activity) {
   const coords = points.map(([lat, lng]) => `${lng.toFixed(6)},${lat.toFixed(6)}`).join(';');
   const url =
-    `${OSRM_ROUTE_URL}/${coords}` +
+    `${OSRM_HOST}/${activity.service}/route/v1/${activity.profile}/${coords}` +
     '?overview=full&geometries=geojson&continue_straight=true';
 
   await throttle();
@@ -75,6 +75,10 @@ export async function planRoadLoop(points) {
   return {
     points: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
     distanceKm: route.distance / 1000,
+    // The profile's own travel time. Useful beyond showing a duration: the
+    // bicycle profile drops to walking pace on footways and steps, so a
+    // route far slower than the profile cruises at is one spent pushing.
+    durationH: (route.duration ?? 0) / 3600,
     snapDistances: (data.waypoints || []).map((w) => w.distance ?? 0),
   };
 }

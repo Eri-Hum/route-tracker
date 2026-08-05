@@ -11,6 +11,16 @@ function toDeg(rad) {
   return (rad * 180) / Math.PI;
 }
 
+// Compass bearing (deg) from one point to another.
+function bearingBetween([lat1, lng1], [lat2, lng2]) {
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+  const deltaLng = toRad(lng2 - lng1);
+  const y = Math.sin(deltaLng) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLng);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
 // Given a start point, bearing (deg) and distance (km), return the destination point.
 export function destinationPoint([lat, lng], bearingDeg, distanceKm) {
   const bearing = toRad(bearingDeg);
@@ -45,8 +55,10 @@ function ringThrough(start, radiusKm, rotationDeg, shapeVariant, numPoints) {
 
   for (let i = 0; i <= numPoints; i++) {
     const angle = startBearing + (360 * i) / numPoints;
-    // Modulate the radius slightly per shape variant to make routes distinct.
-    const wobble = 1 + shapeVariant * 0.15 * Math.sin(toRad(angle * 2));
+    // Modulate the radius to make routes distinct. `shapeVariant` is the
+    // amplitude directly, so callers control how far a shape may wander -
+    // a bike loop wants to stay much closer to a clean ring than a run.
+    const wobble = 1 + shapeVariant * Math.sin(toRad(angle * 2));
     points.push(destinationPoint(center, angle, radiusKm * wobble));
   }
   // Anchor both ends exactly on the start location.
@@ -113,6 +125,32 @@ export function overlapRatio(points) {
     if (count > 1) repeated += (count - 1) * lengthByKey.get(key);
   }
   return repeated / total;
+}
+
+// How much a route turns beyond what its shape requires, in degrees per km.
+//
+// This is the "wiggliness" measure. Any closed loop has to turn a full 360
+// degrees to get back where it started, so only turning past that counts.
+// A route that runs clean lines between corners scores near zero, while one
+// that keeps jinking through side streets scores high - the difference
+// between a ride and a slog. The path is resampled to an even spacing
+// first, so gentle curves in a road do not read as turning while genuine
+// changes of direction still do.
+export function excessTurnPerKm(points, spacingKm = 0.15) {
+  const total = pathDistance(points);
+  if (total <= 0) return 0;
+
+  const sampleCount = Math.max(4, Math.round(total / spacingKm));
+  const sampled = resamplePath(points, sampleCount);
+
+  let turned = 0;
+  for (let i = 2; i < sampled.length; i++) {
+    const delta = Math.abs(
+      bearingBetween(sampled[i - 1], sampled[i]) - bearingBetween(sampled[i - 2], sampled[i - 1])
+    );
+    turned += delta > 180 ? 360 - delta : delta;
+  }
+  return Math.max(0, turned - 360) / total;
 }
 
 // Pick `numSamples` points evenly spaced (by distance) along a path. Used to

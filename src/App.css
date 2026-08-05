@@ -171,6 +171,32 @@ select {
   text-transform: capitalize;
 }
 
+.segmented {
+  display: flex;
+  gap: 4px;
+  background: #22252d;
+  border: 1px solid #2e313a;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.segmented-option {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: #9aa5b1;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.segmented-option--active {
+  background: #2b7de6;
+  color: #fff;
+}
+
 .route-nav {
   display: flex;
   flex-direction: column;
