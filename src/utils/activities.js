@@ -8,7 +8,7 @@
 export const ACTIVITIES = {
   foot: {
     id: 'foot',
-    label: 'Walk / run',
+    label: 'Gå / spring',
     // routing.openstreetmap.de serves each profile from its own path.
     service: 'routed-foot',
     profile: 'foot',
@@ -45,7 +45,7 @@ export const ACTIVITIES = {
 
   bike: {
     id: 'bike',
-    label: 'Bike',
+    label: 'Cykla',
     service: 'routed-bike',
     profile: 'bike',
 

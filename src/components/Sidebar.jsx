@@ -13,15 +13,23 @@ const PANEL_DRAG_THRESHOLD = 40;
 const INTERACTIVE_SELECTOR = 'button, input, select, textarea, a, [role="button"]';
 
 const TERRAIN_OPTIONS = [
-  { id: 'any', label: "Doesn't matter" },
-  { id: 'flat', label: 'Flat' },
-  { id: 'hilly', label: 'Hilly' },
+  { id: 'any', label: 'Spelar ingen roll' },
+  { id: 'flat', label: 'Platt' },
+  { id: 'hilly', label: 'Kuperad' },
 ];
+
+// Route/segment terrain is stored as 'flat' or 'hilly' internally (also
+// used as the CSS class suffix on the terrain badge); this is only for
+// what's actually displayed.
+const TERRAIN_LABELS = {
+  flat: 'Platt',
+  hilly: 'Kuperad',
+};
 
 function formatMinutes(mins) {
   const h = Math.floor(mins / 60);
   const m = Math.round(mins % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  return h > 0 ? `${h}h ${m}min` : `${m}min`;
 }
 
 function Segmented({ options, value, onChange, label }) {
@@ -57,12 +65,12 @@ function DrawModeControls({
   let hint;
   if (penActive) {
     hint = started
-      ? 'Draw on from the marked point. The map holds still until you stop.'
-      : 'Press and drag on the map to draw a path freehand.';
+      ? 'Fortsätt rita från den markerade punkten. Kartan står still tills du slutar.'
+      : 'Tryck och dra på kartan för att rita en bana för hand.';
   } else if (started) {
-    hint = 'Move and zoom the map freely, then draw again to carry on from the marker.';
+    hint = 'Flytta och zooma kartan fritt, rita sedan igen för att fortsätta från markören.';
   } else {
-    hint = 'Move the map freely, then tap "Start drawing" to draw a route.';
+    hint = 'Flytta kartan fritt, tryck sedan på "Börja rita" för att rita en rutt.';
   }
 
   return (
@@ -72,18 +80,18 @@ function DrawModeControls({
           <div className="stat-card-headline">
             <span className="stat-big">{drawnDistanceKm.toFixed(2)}</span>
             <span className="stat-unit">km</span>
-            <span className="stat-chip">{drawnSegmentCount} stroke{drawnSegmentCount === 1 ? '' : 's'}</span>
+            <span className="stat-chip">{drawnSegmentCount} streck</span>
           </div>
           {drawnElevationLoading ? (
             <div className="loading-indicator">
               <span className="spinner" />
-              Checking elevation…
+              Kontrollerar höjd…
             </div>
           ) : (
             drawnElevationGainM !== null && (
               <div className="stat-grid">
                 <div className="stat-tile">
-                  <span className="stat-tile-label">Elevation gain</span>
+                  <span className="stat-tile-label">Höjdstigning</span>
                   <span className="stat-tile-value">{Math.round(drawnElevationGainM)} m</span>
                 </div>
               </div>
@@ -91,10 +99,10 @@ function DrawModeControls({
           )}
           <div className="button-row">
             <button className="btn btn-secondary" onClick={onUndoSegment}>
-              Undo stroke
+              Ångra streck
             </button>
             <button className="btn btn-secondary" onClick={onClear}>
-              Clear
+              Rensa
             </button>
           </div>
         </div>
@@ -102,11 +110,11 @@ function DrawModeControls({
 
       <button className="btn btn-primary btn-large" onClick={onTogglePen}>
         {penActive ? (
-          <>Stop drawing</>
+          <>Sluta rita</>
         ) : (
           <>
             <PencilIcon />
-            {started ? 'Continue drawing' : 'Start drawing'}
+            {started ? 'Fortsätt rita' : 'Börja rita'}
           </>
         )}
       </button>
@@ -143,9 +151,9 @@ function FindModeControls({
       {!route && (
         <>
           <div className="field-group">
-            <span className="field-label">Activity</span>
+            <span className="field-label">Aktivitet</span>
             <Segmented
-              label="Activity"
+              label="Aktivitet"
               options={Object.values(ACTIVITIES).map((a) => ({ id: a.id, label: a.label }))}
               value={activityId}
               onChange={onActivityChange}
@@ -154,7 +162,7 @@ function FindModeControls({
 
           <div className="field-group">
             <label className="field-label" htmlFor="distance-input">
-              Desired distance
+              Önskad distans
             </label>
             <div className="distance-input-wrap">
               <input
@@ -170,8 +178,8 @@ function FindModeControls({
           </div>
 
           <div className="field-group">
-            <span className="field-label">Terrain</span>
-            <Segmented label="Terrain" options={TERRAIN_OPTIONS} value={terrain} onChange={setTerrain} />
+            <span className="field-label">Terräng</span>
+            <Segmented label="Terräng" options={TERRAIN_OPTIONS} value={terrain} onChange={setTerrain} />
           </div>
 
           <button
@@ -181,7 +189,7 @@ function FindModeControls({
             <PinIcon />
             {userPosition
               ? `${userPosition[0].toFixed(3)}, ${userPosition[1].toFixed(3)}`
-              : 'Use my location'}
+              : 'Använd min position'}
           </button>
           {geoError && <p className="error-text">{geoError}</p>}
 
@@ -193,10 +201,10 @@ function FindModeControls({
             {loading ? (
               <>
                 <span className="spinner spinner--light" />
-                Matching your distance…
+                Matchar din distans…
               </>
             ) : (
-              'Find routes'
+              'Hitta rutter'
             )}
           </button>
         </>
@@ -209,22 +217,24 @@ function FindModeControls({
               className="btn-icon"
               onClick={onPrevSuggestion}
               disabled={loading || currentIndex === 0}
-              aria-label="Previous suggestion"
+              aria-label="Föregående förslag"
             >
               <ChevronIcon direction="left" />
             </button>
-            <span className="hint">Route {currentIndex + 1}</span>
+            <span className="hint">Rutt {currentIndex + 1}</span>
             <button
               className="btn-icon"
               onClick={onNextSuggestion}
               disabled={nextDisabled}
-              aria-label="Next suggestion"
+              aria-label="Nästa förslag"
             >
               {loading ? <span className="spinner" /> : <ChevronIcon direction="right" />}
             </button>
           </div>
 
-          <div className={`terrain-badge terrain-badge--${route.terrain}`}>{route.terrain}</div>
+          <div className={`terrain-badge terrain-badge--${route.terrain}`}>
+            {TERRAIN_LABELS[route.terrain] ?? route.terrain}
+          </div>
 
           <div className="stat-card">
             <div className="stat-card-headline">
@@ -233,23 +243,23 @@ function FindModeControls({
             </div>
             <div className="stat-grid">
               <div className="stat-tile">
-                <span className="stat-tile-label">Elevation</span>
+                <span className="stat-tile-label">Höjdstigning</span>
                 <span className="stat-tile-value">{Math.round(route.elevationGainM)} m</span>
               </div>
               <div className="stat-tile">
-                <span className="stat-tile-label">Est. time</span>
+                <span className="stat-tile-label">Ber. tid</span>
                 <span className="stat-tile-value">{formatMinutes(route.estimatedMinutes)}</span>
               </div>
             </div>
             {route.offTarget && (
               <p className="hint hint-warn">
-                Closest loop the streets around here allow — try Next for another.
+                Närmaste slinga som gatorna här tillåter — testa Nästa för en annan.
               </p>
             )}
           </div>
 
           <button className="btn btn-secondary" onClick={onResetSearch}>
-            New search
+            Ny sökning
           </button>
         </div>
       )}
@@ -362,7 +372,7 @@ function SheetHandle({ onToggle }) {
     <button
       type="button"
       className="sheet-handle-row"
-      aria-label="Show or hide panel"
+      aria-label="Visa eller dölj panelen"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
